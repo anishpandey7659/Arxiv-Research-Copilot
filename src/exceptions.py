@@ -16,3 +16,9 @@ class PDFDownloadException(Exception):
 
 class PDFDownloadTimeoutError(PDFDownloadException):
     """Exception raised when downloading a PDF times out."""
+
+class PDFParsingException(Exception):
+    """Exception raised when Parsing a PDF """
+
+class PDFValidationError(PDFParsingException):
+    """Exception raised when We dont have valid PDF"""
