@@ -51,6 +51,21 @@ class ArxivSettings(BaseConfigSettings):
         os.makedirs(v, exist_ok=True)
         return v
     
+class ChunkingSettings(BaseConfigSettings):
+    model_config=SettingsConfigDict(
+        env_file=[".env", str(ENV_FILE_PATH)],
+        env_prefix="CHUNKING__",
+        extra="ignore",
+        frozen=True,
+        case_sensitive=False,
+    )
+    chunk_size: int = 600
+    overlap_size : int = 100
+    min_chunk_size : int = 100
+    section_based: bool = True  # Use section-based chunking when available
+    
+
+
 
 class PDFParserSettings(BaseConfigSettings):
     model_config = SettingsConfigDict(
@@ -67,8 +82,25 @@ class PDFParserSettings(BaseConfigSettings):
     do_table_structure: bool = True
 
 class Settings(BaseConfigSettings):
+
+    app_version: str = "0.1.0"
+    debug: bool = True
+    environment: Literal["development", "staging", "production"] = "development"
+    service_name: str = "rag-api"
+
+    postgres_database_url: str = Field(
+        default="postgresql://rag_user:rag_password@localhost:5432/rag_db",
+        validation_alias="POSTGRES_DATABASE_URL"
+    )
+
+    postgres_echo_sql: bool = False
+    postgres_pool_size: int = 5
+    postgres_max_overflow: int = 0
+
     arxiv: ArxivSettings = Field(default_factory=ArxivSettings)
     pdf_parser: PDFParserSettings = Field(default_factory=PDFParserSettings)
+    chunker : ChunkingSettings = Field(default_factory=ChunkingSettings)
+
 
 
 def get_settings() -> Settings:
