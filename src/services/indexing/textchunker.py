@@ -52,7 +52,7 @@ class TextChunker:
         return " ".join(words)
 
 
-    def append_chunk(self,chunks:List[TextChunk], chunk_dict:TextChunk, chunk_size:int=600, min_words:int=100):
+    def _append_chunk(self,chunks:List[TextChunk], chunk_dict:TextChunk, chunk_size:int=600, min_words:int=100):
         """Append a chunk to the list, merging into the previous chunk if it's too small."""
         if chunks and chunk_dict.metadata.word_count < min_words:
             prev = chunks[-1]
@@ -74,13 +74,9 @@ class TextChunker:
         """Chunk a paper using hybrid section-based approach.
 
         Strategy:
-        - For sections 100-800 words: Use as single chunk with title+abstract
-        - For sections <100 words: Combine with adjacent sections
-        - For sections >800 words: Split using traditional word-based chunking
+        - If sections is given then used section based chunking
         - Fallback to traditional chunking if no sections available
 
-        :param title: Paper title
-        :param abstract: Paper abstract
         :param full_text: Full text content
         :param arxiv_id: ArXiv ID of the paper
         :param paper_id: Database ID of the paper
@@ -192,9 +188,8 @@ class TextChunker:
 
         Args:
             sections_data: List of section dicts with 'title'/'content' keys, or dict (optional)
-            target_words: Target number of words per chunk (default: 600)
-            overlap_words: Number of words to overlap between chunks (default: 100)
-            min_words: Minimum words for a chunk to stand alone; smaller ones get merged (default: 100)
+            Arxiv_id : For metadata:str
+            paper_id : For metadata:str
 
         Returns:
             List of chunk dictionaries with metadata
@@ -218,7 +213,7 @@ class TextChunker:
             
             if len(words) <= self.chunk_size:
                 chunk_dict =self._create_section_chunk(section_text,section_name,chunk_index,arxiv_id,paper_id)
-                self.append_chunk(chunks,chunk_dict, self.chunk_size,self.min_chunk_size)
+                self._append_chunk(chunks,chunk_dict, self.chunk_size,self.min_chunk_size)
                 chunk_index += 1
             else:
                 start = 0
@@ -227,7 +222,7 @@ class TextChunker:
                     chunk_words = words[start:end]
                     chunk_text = self._reconstruct_text(chunk_words)
                     chunk_dict =self._create_section_chunk(chunk_text,section_name,chunk_index,arxiv_id,paper_id)
-                    self.append_chunk(chunks,chunk_dict, self.chunk_size, self.min_chunk_size)
+                    self._append_chunk(chunks,chunk_dict, self.chunk_size, self.min_chunk_size)
                     chunk_index += 1
                     start += (self.chunk_size - self.overlap_size)
 

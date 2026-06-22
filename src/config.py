@@ -64,7 +64,27 @@ class ChunkingSettings(BaseConfigSettings):
     min_chunk_size : int = 100
     section_based: bool = True  # Use section-based chunking when available
     
+class OpenSearchSettings(BaseConfigSettings):
+    model_config = SettingsConfigDict(
+        env_file=[".env", str(ENV_FILE_PATH)],
+        env_prefix="OPENSEARCH__",
+        extra="ignore",
+        frozen=True,
+        case_sensitive=False,
+    )
 
+    host: str = "http://localhost:9200"
+    index_name: str = "arxiv-papers"
+    chunk_index_suffix: str = "chunks"  # Creates single hybrid index: {index_name}-{suffix}
+    max_text_size: int = 1000000
+
+    # Vector search settings
+    vector_dimension: int = 1024  # Jina embeddings dimension
+    vector_space_type: str = "cosinesimil"  # cosinesimil, l2, innerproduct
+
+    # Hybrid search settings
+    rrf_pipeline_name: str = "hybrid-rrf-pipeline"
+    hybrid_search_size_multiplier: int = 2  # Get k*multiplier for better recall
 
 
 class PDFParserSettings(BaseConfigSettings):
@@ -97,9 +117,12 @@ class Settings(BaseConfigSettings):
     postgres_pool_size: int = 5
     postgres_max_overflow: int = 0
 
+    jina_api_key: str = Field(validation_alias="JINA_API_KEY")
+
     arxiv: ArxivSettings = Field(default_factory=ArxivSettings)
     pdf_parser: PDFParserSettings = Field(default_factory=PDFParserSettings)
     chunker : ChunkingSettings = Field(default_factory=ChunkingSettings)
+    opensearch : OpenSearchSettings = Field(default_factory=OpenSearchSettings)
 
 
 
