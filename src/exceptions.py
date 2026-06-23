@@ -22,3 +22,15 @@ class PDFParsingException(Exception):
 
 class PDFValidationError(PDFParsingException):
     """Exception raised when We dont have valid PDF"""
+
+class LLMException(Exception):
+    """Base exception for LLM-related errors."""
+
+class GroqLLMException(LLMException):
+    """Exception raised for Groq API errors."""
+
+class GroqConnectionError(GroqLLMException):
+    """Exception raised due to Connection Failed"""
+
+class GroqTimeoutError(GroqLLMException):
+    """Exception raised when the Groq API times out."""

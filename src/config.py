@@ -117,6 +117,10 @@ class Settings(BaseConfigSettings):
     postgres_pool_size: int = 5
     postgres_max_overflow: int = 0
 
+    groq_api_key: str = ""
+    groq_model: str = "openai/gpt-oss-120b"
+    groq_timeout: int = 300
+
     jina_api_key: str = Field(validation_alias="JINA_API_KEY")
 
     arxiv: ArxivSettings = Field(default_factory=ArxivSettings)
