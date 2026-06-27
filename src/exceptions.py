@@ -34,3 +34,13 @@ class GroqConnectionError(GroqLLMException):
 
 class GroqTimeoutError(GroqLLMException):
     """Exception raised when the Groq API times out."""
+
+class GuardrailError(Exception):
+    """Raised when a guardrail check fails unexpectedly.
+
+    This is distinct from a normal "blocked" classification result, which
+    is returned rather than raised.
+    """
+
+class LLmClassificationError(Exception):
+    """Raised when the underlying LLM classification call fails unexpectedly."""
