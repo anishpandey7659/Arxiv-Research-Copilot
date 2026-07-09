@@ -5,15 +5,6 @@ from typing import Optional
 
 
 class Category(Enum):
-    SAFE = "safe"
-    GREETING = "greeting"
-    JAILBREAK = "jailbreak"
-    SEXUAL = "sexual"
-    SEXUAL_MINOR = "sexual_minor"      # highest priority, hard-block
-    HATE = "hate"
-    DANGEROUS = "dangerous"
-
-class LLM_CATEGORY(Enum):
     OFF_TOPIC = "off_topic"
     NORMAL = "normal"
     GREETING = "greeting"
@@ -23,8 +14,9 @@ class LLM_CATEGORY(Enum):
     DANGEROUS = "dangerous"
 
 
-class InputGuardrailResult(BaseModel):
-    category: LLM_CATEGORY
+
+class LLmGuardrailResult(BaseModel):
+    category: Category
     unsafe: bool
     reason: str = Field(
         description="Short reason for classification",
@@ -45,3 +37,19 @@ class RegrexResult:
     action: str = "allow"             # "allow" | "review" | "block"
     raw_input: str = ""
     normalized_input: str = ""
+
+class GuardrailStatus(Enum):
+    OK = "ok"
+    EMPTY_QUERY = "empty_query"
+    MISSING_USER = "missing_user"
+    REGEX = 'regex_match'
+    INPUT_LIMIT = "input_limit"
+    LLM_REJECT ='llm_reject'
+
+class GuardrailResult(BaseModel):
+    allowed: bool
+    status: GuardrailStatus
+    category: Category | None
+    reason: str= Field(
+        description="Short reason for classification",
+    )

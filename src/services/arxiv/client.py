@@ -53,6 +53,72 @@ class ArxivClient:
     def search_category(self) -> str:
         return self._settings.search_category
 
+    # ------------------------------------------------------------------
+    # Query-building helpers
+    # ------------------------------------------------------------------
+
+    def _looks_like_raw_arxiv_syntax(self, search_query: str) -> bool:
+        """
+        Detect whether a search_query string already uses arXiv field
+        syntax (ti:, abs:, au:, all:, cat:, id:, co:, jr:) as opposed to
+        being plain free text typed by an end user.
+
+        Args:
+            search_query: The raw search query string to inspect
+
+        Returns:
+            True if the query already looks like valid arXiv syntax
+        """
+        field_prefixes = ("ti:", "abs:", "au:", "all:", "cat:", "id:", "co:", "jr:")
+        q_lower = search_query.lower()
+        return any(prefix in q_lower for prefix in field_prefixes)
+
+    def _sanitize_user_query(self, user_query: str) -> str:
+        """
+        Strip characters that would break arXiv query syntax if a user
+        accidentally types them (parentheses, quotes, colons).
+
+        Args:
+            user_query: Raw free text from the end user
+
+        Returns:
+            Cleaned text safe to embed inside a quoted arXiv phrase search
+        """
+        cleaned = user_query.replace('"', " ").replace("(", " ").replace(")", " ").replace(":", " ")
+        return " ".join(cleaned.split())
+
+    def _build_phrase_query(self, user_query: str) -> str:
+        """
+        Build a phrase search across title + abstract from plain user text.
+
+        Args:
+            user_query: Raw free text from the end user
+
+        Returns:
+            An arXiv search_query string, e.g. ti:"small language model" OR abs:"small language model"
+        """
+        clean_q = self._sanitize_user_query(user_query)
+        return f'ti:"{clean_q}" OR abs:"{clean_q}"'
+
+    def _build_fallback_query(self, user_query: str) -> str:
+        """
+        Build a looser AND-of-terms query used when the exact phrase
+        search returns no results.
+
+        Args:
+            user_query: Raw free text from the end user
+
+        Returns:
+            An arXiv search_query string, e.g. all:small AND all:language AND all:model
+        """
+        clean_q = self._sanitize_user_query(user_query)
+        words = clean_q.split()
+        return " AND ".join(f"all:{w}" for w in words)
+
+    # ------------------------------------------------------------------
+    # Public fetch methods
+    # ------------------------------------------------------------------
+
     async def fetch_papers(
         self,
         max_results: Optional[int] = None,
@@ -61,8 +127,8 @@ class ArxivClient:
         sort_order: str = "descending",
         from_date: Optional[str] = None,
         to_date: Optional[str] = None,
-    )-> List[ArxivPaper]:
-        """ 
+    ) -> List[ArxivPaper]:
+        """
         Fetch papers from arXiv for the configured category.
 
         Args:
@@ -90,63 +156,15 @@ class ArxivClient:
             # Use correct arXiv API syntax with + symbols
             search_query += f" AND submittedDate:[{date_from}+TO+{date_to}]"
 
+        logger.info(f"Fetching {max_results} {self.search_category} papers from arXiv")
 
-        params = {
-            "search_query": search_query,
-            "start": start,
-            "max_results": min(max_results, 2000),
-            "sortBy": sort_by,
-            "sortOrder": sort_order,
-        }
-
-        safe = ":+[]"  # Don't encode :, +, [, ] characters needed for arXiv queries
-        url = f"{self.base_url}?{urlencode(params, quote_via=quote, safe=safe)}"
-
-        # Retry loop with exponential backoff for 429 rate limits
-        max_retries = 3
-        base_wait = 5
-
-        for attempt in range(max_retries):
-            try:
-                logger.info(f"Fetching {max_results} {self.search_category} papers from arXiv (attempt {attempt + 1}/{max_retries})")
-
-                # Add rate limiting delay between all requests (arXiv recommends 3 seconds)
-                if self._last_request_time is not None:
-                    time_since_last = time.time() - self._last_request_time
-                    if time_since_last < self.rate_limit_delay:
-                        sleep_time = self.rate_limit_delay - time_since_last
-                        await asyncio.sleep(sleep_time)
-
-                self._last_request_time = time.time()
-
-                async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-                    response = await client.get(url)
-                    response.raise_for_status()
-                    xml_data = response.text
-
-                papers = self._parse_response(xml_data)
-                logger.info(f"Fetched {len(papers)} papers")
-
-                return papers
-
-            except httpx.HTTPStatusError as e:
-                status_code = e.response.status_code
-                if status_code in (429, 503) and attempt < max_retries - 1:
-                    wait_time = base_wait * (2 ** attempt)
-                    logger.warning(f"arXiv API returned {status_code}. Waiting {wait_time}s before retry {attempt + 2}/{max_retries}...")
-                    await asyncio.sleep(wait_time)
-                    continue
-                logger.error(f"arXiv API HTTP error: {e}")
-                raise ArxivAPIException(f"arXiv API returned error {status_code}: {e}")
-            except httpx.TimeoutException as e:
-                logger.error(f"arXiv API timeout: {e}")
-                raise ArxivAPITimeoutError(f"arXiv API request timed out: {e}")
-            except Exception as e:
-                logger.error(f"Failed to fetch papers from arXiv: {e}")
-                raise ArxivAPIException(f"Unexpected error fetching papers from arXiv: {e}")
-
-        # Should never reach here, but satisfy type checker
-        return []
+        return await self._execute_query(
+            search_query=search_query,
+            max_results=max_results,
+            start=start,
+            sort_by=sort_by,
+            sort_order=sort_order,
+        )
 
     async def fetch_papers_with_query(
         self,
@@ -157,10 +175,18 @@ class ArxivClient:
         sort_order: str = "descending",
     ) -> List[ArxivPaper]:
         """
-        Fetch papers from arXiv using a custom search query.
+        Fetch papers from arXiv using a search query.
+
+        Accepts either:
+        - Raw arXiv query syntax (e.g., "cat:cs.AI AND submittedDate:[20240101 TO 20241231]")
+        - Plain free text typed by an end user (e.g., "small language model"),
+          which is automatically converted into a phrase search across
+          title + abstract. If that strict phrase search returns no
+          results, it automatically falls back to a looser AND-of-terms
+          query.
 
         Args:
-            search_query: Custom arXiv search query (e.g., "cat:cs.AI AND submittedDate:[20240101 TO 20241231]")
+            search_query: Custom arXiv search query, or plain user text
             max_results: Maximum number of papers to fetch (uses settings default if None)
             start: Starting index for pagination
             sort_by: Sort criteria (submittedDate, lastUpdatedDate, relevance)
@@ -178,10 +204,113 @@ class ArxivClient:
 
             # Papers with specific keywords in title
             "ti:transformer AND cat:cs.AI"
+
+            # Plain user text (auto-converted to a phrase search)
+            "small language model"
         """
         if max_results is None:
             max_results = self.max_results
 
+        is_raw_syntax = self._looks_like_raw_arxiv_syntax(search_query)
+
+        if is_raw_syntax:
+            effective_query = search_query
+        else:
+            effective_query = self._build_phrase_query(search_query)
+
+        logger.info(f"Searching arXiv with query: {effective_query}")
+
+        papers = await self._execute_query(
+            search_query=effective_query,
+            max_results=max_results,
+            start=start,
+            sort_by=sort_by,
+            sort_order=sort_order,
+        )
+
+        # Fallback: if a phrase search built from plain user text returned
+        # nothing, loosen it to an AND-of-terms search before giving up.
+        if not papers and not is_raw_syntax:
+            fallback_query = self._build_fallback_query(search_query)
+            if fallback_query:
+                logger.info(f"No results for phrase query, retrying with: {fallback_query}")
+                papers = await self._execute_query(
+                    search_query=fallback_query,
+                    max_results=max_results,
+                    start=start,
+                    sort_by=sort_by,
+                    sort_order=sort_order,
+                )
+
+        return papers
+
+    async def fetch_paper_by_id(self, arxiv_id: str) -> Optional[ArxivPaper]:
+        """
+        Fetch a specific paper by its arXiv ID.
+
+        Args:
+            arxiv_id: arXiv paper ID (e.g., "2507.17748v1" or "2507.17748")
+
+        Returns:
+            ArxivPaper object or None if not found
+        """
+        # Clean the arXiv ID (remove version if needed for search)
+        clean_id = arxiv_id.split("v")[0] if "v" in arxiv_id else arxiv_id
+        params = {"id_list": clean_id, "max_results": 1}
+
+        safe = ":+[]*"  # Don't encode :, +, [, ], *, characters needed for arXiv queries
+        url = f"{self.base_url}?{urlencode(params, quote_via=quote, safe=safe)}"
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url)
+                response.raise_for_status()
+                xml_data = response.text
+
+            papers = self._parse_response(xml_data)
+
+            if papers:
+                return papers[0]
+            else:
+                logger.warning(f"Paper {arxiv_id} not found")
+                return None
+
+        except httpx.TimeoutException as e:
+            logger.error(f"arXiv API timeout for paper {arxiv_id}: {e}")
+            raise ArxivAPITimeoutError(f"arXiv API request timed out for paper {arxiv_id}: {e}")
+        except httpx.HTTPStatusError as e:
+            logger.error(f"arXiv API HTTP error for paper {arxiv_id}: {e}")
+            raise ArxivAPIException(f"arXiv API returned error {e.response.status_code} for paper {arxiv_id}: {e}")
+        except Exception as e:
+            logger.error(f"Failed to fetch paper {arxiv_id} from arXiv: {e}")
+            raise ArxivAPIException(f"Unexpected error fetching paper {arxiv_id} from arXiv: {e}")
+
+    # ------------------------------------------------------------------
+    # Shared request execution
+    # ------------------------------------------------------------------
+
+    async def _execute_query(
+        self,
+        search_query: str,
+        max_results: int,
+        start: int,
+        sort_by: str,
+        sort_order: str,
+    ) -> List[ArxivPaper]:
+        """
+        Execute a single arXiv API request for a given search_query string,
+        including rate limiting and retry-with-backoff on 429/503 errors.
+
+        Args:
+            search_query: Fully-formed arXiv search_query string
+            max_results: Maximum number of papers to fetch
+            start: Starting index for pagination
+            sort_by: Sort criteria (submittedDate, lastUpdatedDate, relevance)
+            sort_order: Sort order (ascending, descending)
+
+        Returns:
+            List of ArxivPaper objects matching the search query
+        """
         params = {
             "search_query": search_query,
             "start": start,
@@ -237,46 +366,9 @@ class ArxivClient:
         # Should never reach here, but satisfy type checker
         return []
 
-    async def fetch_paper_by_id(self, arxiv_id: str) -> Optional[ArxivPaper]:
-        """
-        Fetch a specific paper by its arXiv ID.
-
-        Args:
-            arxiv_id: arXiv paper ID (e.g., "2507.17748v1" or "2507.17748")
-
-        Returns:
-            ArxivPaper object or None if not found
-        """
-        # Clean the arXiv ID (remove version if needed for search)
-        clean_id = arxiv_id.split("v")[0] if "v" in arxiv_id else arxiv_id
-        params = {"id_list": clean_id, "max_results": 1}
-
-        safe = ":+[]*"  # Don't encode :, +, [, ], *, characters needed for arXiv queries
-        url = f"{self.base_url}?{urlencode(params, quote_via=quote, safe=safe)}"
-
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(url)
-                response.raise_for_status()
-                xml_data = response.text
-
-            papers = self._parse_response(xml_data)
-
-            if papers:
-                return papers[0]
-            else:
-                logger.warning(f"Paper {arxiv_id} not found")
-                return None
-
-        except httpx.TimeoutException as e:
-            logger.error(f"arXiv API timeout for paper {arxiv_id}: {e}")
-            raise ArxivAPITimeoutError(f"arXiv API request timed out for paper {arxiv_id}: {e}")
-        except httpx.HTTPStatusError as e:
-            logger.error(f"arXiv API HTTP error for paper {arxiv_id}: {e}")
-            raise ArxivAPIException(f"arXiv API returned error {e.response.status_code} for paper {arxiv_id}: {e}")
-        except Exception as e:
-            logger.error(f"Failed to fetch paper {arxiv_id} from arXiv: {e}")
-            raise ArxivAPIException(f"Unexpected error fetching paper {arxiv_id} from arXiv: {e}")
+    # ------------------------------------------------------------------
+    # Response parsing
+    # ------------------------------------------------------------------
 
     def _parse_response(self, xml_data: str) -> List[ArxivPaper]:
         """

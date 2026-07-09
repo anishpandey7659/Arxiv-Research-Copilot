@@ -19,6 +19,16 @@ class PaperRepository:
         self.session.refresh(db_paper)
         return db_paper
 
+    def create_many(self,papers: list[PaperCreate],) -> list[Paper]:
+        db_objects = [
+            Paper(**paper.model_dump())
+            for paper in papers
+        ]
+        self.session.add_all(db_objects)
+        self.session.commit()
+
+        return db_objects
+
     def get_by_arxiv_id(self, arxiv_id: str) -> Optional[Paper]:
         stmt = select(Paper).where(Paper.arxiv_id == arxiv_id)
         return self.session.scalar(stmt)

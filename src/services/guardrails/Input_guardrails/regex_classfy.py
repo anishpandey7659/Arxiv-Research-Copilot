@@ -40,7 +40,6 @@ class RegrexClassification:
         # Each entry is (Category, bank_key) where bank_key is the key used to
         # look up that category's pattern list in bank_map.
         self.PRIORITY_ORDER: List[Tuple[Category, str]] = [
-            (Category.SEXUAL_MINOR, "SEXUAL_MINOR_PATTERNS"),
             (Category.DANGEROUS, "DANGEROUS_PATTERNS"),
             (Category.SEXUAL, "SEXUAL_PATTERNS"),
             (Category.HATE, "HATE_PATTERNS"),
@@ -50,13 +49,12 @@ class RegrexClassification:
 
         # Action mapping per category - adjust to your risk tolerance.
         self.DEFAULT_ACTIONS: Dict[Category, str] = {
-            Category.SEXUAL_MINOR: "block",
             Category.DANGEROUS: "block",
             Category.SEXUAL: "review",
             Category.HATE: "review",
             Category.JAILBREAK: "review",
             Category.GREETING: "allow",
-            Category.SAFE: "allow",
+            Category.NORMAL: "allow",
         }
 
         logger.info("Regex classifier initialized")
@@ -118,7 +116,6 @@ class RegrexClassification:
     def classify_input(
         self,
         text: str,
-        sexual_minor_patterns: Optional[List[re.Pattern]] = None,
         custom_actions: Optional[Dict[Category, str]] = None,
     ) -> RegrexResult:
         """Run input through all guardrail pattern banks and return the highest-priority classification.
@@ -142,7 +139,6 @@ class RegrexClassification:
 
         # Keys here must match the bank_key strings used in PRIORITY_ORDER.
         bank_map = {
-            "SEXUAL_MINOR_PATTERNS": sexual_minor_patterns or [],
             "DANGEROUS_PATTERNS": self.DANGEROUS_PATTERNS or [],
             "SEXUAL_PATTERNS": self.SEXUAL_PATTERNS or [],
             "HATE_PATTERNS": self.HATE_PATTERNS or [],
@@ -166,32 +162,10 @@ class RegrexClassification:
 
         logger.debug("Regex classifier found no matches, classified as SAFE")
         return RegrexResult(
-            category=Category.SAFE,
+            category=Category.NORMAL,
             matched=False,
             matched_patterns=[],
             action="allow",
             raw_input=text,
             normalized_input=normalized,
         )
-
-    def get_default_message(self, classifier_output: RegrexResult) -> Union[str, bool]:
-        """Decide what to do with a classified input.
-
-        :param classifier_output: Output from `classify_input`
-        :returns: A rejection/canned message string if the category is
-            blocked (greeting, hate, jailbreak, sexual, dangerous), or
-            False if the input is safe and should be sent further down
-            the pipeline (e.g. to the LLM classifier)
-        """
-        category = classifier_output.category.value
-
-        if category == "greeting":
-            logger.debug("Regex classifier matched greeting pattern")
-            return GREETING_MESSAGE
-
-        blocked_categories = {"hate", "jailbreak", "sexual", "dangerous"}
-        if category in blocked_categories:
-            logger.warning(f"Regex classifier blocked category={category}")
-            return REJECTION_MESSAGES.get(category, DEFAULT_REJECTION)
-
-        return False

@@ -3,7 +3,7 @@ from typing import Dict,List,cast
 
 from src.models.paper import Paper
 
-from src.services.embeddings.jina_client import JinaEmbeddingsClient
+from src.services.embeddings.jina_client import EmbeddingsClient
 from src.services.opensearch.client import OpenSearchClient
 from src.services.indexing.textchunker import TextChunker
 
@@ -20,7 +20,7 @@ class HybridIndexingService:
     3.Store the embed chunk text with metadata     
     
     """
-    def __init__(self,chunker:TextChunker, embeddings_client:JinaEmbeddingsClient, opensearch_client:OpenSearchClient):
+    def __init__(self,chunker:TextChunker, embeddings_client:EmbeddingsClient, opensearch_client:OpenSearchClient):
         """ Intializing the required Service for indexing
         :param TextChunker
         :param JinaEmbeddingsClient
@@ -98,7 +98,7 @@ class HybridIndexingService:
             logger.error(f"Error indexing paper {arxiv_id}: {e}")
             return {"chunks_created": 0, "chunks_indexed": 0, "embeddings_generated": 0, "errors": 1}
 
-    async def index_papers_batch(self, papers: List[Dict], replace_existing: bool = False) -> Dict[str, int]:
+    async def index_papers_batch(self, papers: List[Paper], replace_existing: bool = False) -> Dict[str, int]:
         """Index multiple papers in batch.
 
         :param papers: List of paper data
@@ -114,7 +114,7 @@ class HybridIndexingService:
         }
 
         for paper in papers:
-            arxiv_id = paper.get("arxiv_id")
+            arxiv_id = paper.arxiv_id
 
             # Optionally delete existing chunks
             if replace_existing and arxiv_id:

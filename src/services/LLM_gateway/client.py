@@ -2,47 +2,103 @@ import logging
 from typing import Any, Dict, List, Optional
 import groq
 from groq import Groq
+from pydantic import ValidationError,BaseModel
 from groq import AsyncGroq
 from src.config import Settings
 from src.exceptions import GroqConnectionError, GroqLLMException, GroqTimeoutError
-from src.services.groq_llm.prompts.prompt import RAGPromptBuilder,ResponseParser
-
+from src.services.LLM_gateway.prompts.prompt import RAGPromptBuilder,ResponseParser
+from .route import build_router
+from litellm import Router
 logger = logging.getLogger(__name__)
 
 
-class GroqLLMClient:
+class LLMClient:
     """Client for OpenAI API — drop-in replacement for OllamaClient."""
 
     def __init__(self, settings: Settings):
         self.api_key = settings.groq_api_key
         self.timeout = settings.groq_timeout
         self.prompt_builder = RAGPromptBuilder()
+        self.llm: Optional[Router] = None 
         self.response_parser = ResponseParser()
         self._async_client: Optional[AsyncGroq] = None
 
-    def _get_async_client(self) -> AsyncGroq:
-        if self._async_client is None:
-            self._async_client = AsyncGroq(
-                api_key=self.api_key,
-                timeout=float(self.timeout),
+    async def _ensure_router(self) -> Router:
+        if self.llm is None:
+            self.llm = await build_router()
+        return self.llm
+
+    async def get_structured_response(
+            self,
+            query: str,
+            schema_model: type[BaseModel],
+            system_prompt: str,
+            model_group: str = "chat",
+        ):
+            router = await self._ensure_router()  
+            response = await router.acompletion(
+                model=model_group,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": query},
+                ],
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": schema_model.__name__,
+                        "schema": schema_model.model_json_schema(),
+                    },
+                },
             )
-        return self._async_client
+            content = response.choices[0].message.content
+            try:
+                return schema_model.model_validate_json(content)
+            except ValidationError as e:
+                logger.error(f"Structured output failed schema validation: {e}")
+        
+                raise
 
-    def get_langchain_model(self, model: str, temperature: float = 0.0):
-        """Return a LangChain ChatOpenAI instance for use in agent nodes."""
-        from langchain_groq import ChatGroq
-
-        return ChatGroq(
-            model=model,
-            api_key=self.api_key,
-            temperature=temperature,
-        )
+    async def get_response(
+        self,
+        query: str,
+        system_prompt: str = "You are a helpful assistant.",
+        model_group: str = "chat",
+        temperature: float = 0.0,
+        **kwargs,
+    ) -> dict:
+        """Return a plain text completion — no schema, no RAG context."""
+        try:
+            router = await self._ensure_router()
+            response = await router.acompletion(
+                model=model_group,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": query},
+                ],
+                temperature=temperature,
+                **kwargs,
+            )
+            return {"model":response.model,"answer":response.choices[0].message.content or ""}
+        except groq.AuthenticationError as e:
+            raise GroqLLMException(f"Groq authentication failed — check GROQ_API_KEY: {e}")
+        except groq.APITimeoutError as e:
+            raise GroqTimeoutError(f"Groq API timed out: {e}")
+        except groq.APIConnectionError as e:
+            raise GroqConnectionError(f"Cannot reach Groq API: {e}")
+        except groq.RateLimitError as e:
+            raise GroqLLMException(f"Groq rate limit exceeded: {e}")
+        except Exception as e:
+            logger.error(f"Error generating response: {e}")
+            raise GroqLLMException(f"Failed to generate response: {e}")
 
     async def health_check(self) -> Dict[str, Any]:
         """Check Groq API connectivity."""
         try:
-            client = self._get_async_client()
-            models = await client.models.list()
+            router = await self._ensure_router()
+            models = await router.acompletion(
+                model="chat",
+                messages=[{"role": "user", "content": "What is the capital of France?"}]
+            )
             return {
                 "status": "healthy",
                 "message": "Groq API is reachable",
@@ -72,9 +128,9 @@ class GroqLLMClient:
         try:
             model = model or "openai/gpt-oss-120b"
             prompt = self.prompt_builder.create_rag_prompt(query, chunks)
-            client = self._get_async_client()
+            router = await self._ensure_router()
 
-            response = await client.chat.completions.create(
+            response = await router.acompletion(
                 model=model,
                 messages=[
                     {
@@ -139,9 +195,9 @@ class GroqLLMClient:
         try:
             model = model or "openai/gpt-oss-120b"
             prompt = self.prompt_builder.create_rag_prompt(query, chunks)
-            client = self._get_async_client()
+            router = await self._ensure_router()
 
-            stream = await client.chat.completions.create(
+            stream = await router.acompletion(
                 model=model,
                 messages=[
                     {

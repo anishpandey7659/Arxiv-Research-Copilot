@@ -65,7 +65,7 @@ class DoclingParser:
                 )
             with open(pdf_path,'rb') as f:
                 header=f.read(8)
-                if not header.startswith(b'%PDF-1.7'):
+                if not header.startswith(b'%PDF-'):
                     logger.error(f"PDF Don't contain Header")
                     raise PDFValidationError(f"File does not have PDF header: {pdf_path}")
 

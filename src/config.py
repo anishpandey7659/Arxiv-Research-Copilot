@@ -1,7 +1,6 @@
 import os
 from pathlib import Path
-from typing import List, Literal, Optional
-
+from typing import  Literal, Optional
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -101,6 +100,70 @@ class PDFParserSettings(BaseConfigSettings):
     do_ocr: bool = False
     do_table_structure: bool = True
 
+class LangfuseSettings(BaseConfigSettings):
+    model_config = SettingsConfigDict(
+        env_file=[".env", str(ENV_FILE_PATH)],
+        env_prefix="LANGFUSE__",
+        extra="ignore",
+        frozen=True,
+        case_sensitive=False,
+    )
+
+    public_key: str = ""
+    secret_key: str = ""
+    host: str = "https://us.cloud.langfuse.com"
+    enabled: bool = True
+    flush_at: int = 15  # Number of events before flushing
+    flush_interval: float = 1.0  # Seconds between flushes
+    max_retries: int = 3
+    timeout: int = 30
+    debug: bool = False
+
+class LogfireSettings(BaseConfigSettings):
+    model_config = SettingsConfigDict(
+        env_file=[".env", str(ENV_FILE_PATH)],
+        env_prefix="LOGFIRE__",
+        extra="ignore",
+        frozen=True,
+        case_sensitive=False,
+    )
+
+    enabled: bool = True
+    token: str = ""
+    service_name: str = "arxiv-rag"
+    environment: str = "development"
+    # "if-token-present" | "true" | "false"
+    send_to_logfire: str = "if-token-present"
+
+
+class LiteLLMSettings(BaseConfigSettings):
+    model_config = SettingsConfigDict(
+        env_file=[".env", str(ENV_FILE_PATH)],
+        env_prefix="LITELLM__",
+        extra="ignore",
+        frozen=True,
+        case_sensitive=False,
+    )
+
+    api_base: str = "http://localhost:4000"
+    master_key: str = ""
+    timeout: float = 30.0
+
+    routing_strategy: Literal[
+        "simple-shuffle","least-busy","usage-based-routing","latency-based-routing",
+        "cost-based-routing","usage-based-routing-v2","lar1",
+    ] = "least-busy"
+    num_retries: int = 2
+    request_timeout: float = 30.0
+    allowed_fails: int = 1
+    cooldown_time: int = 60  # seconds
+
+    enable_fallbacks: bool = True
+    enable_caching: bool = True
+
+    drop_params: bool = True
+
+
 class Settings(BaseConfigSettings):
 
     app_version: str = "0.1.0"
@@ -123,10 +186,16 @@ class Settings(BaseConfigSettings):
 
     jina_api_key: str = Field(validation_alias="JINA_API_KEY")
 
+    Input_limit_max_tokens:int = 2000
+    max_requests_per_minute:int = 10
+
     arxiv: ArxivSettings = Field(default_factory=ArxivSettings)
     pdf_parser: PDFParserSettings = Field(default_factory=PDFParserSettings)
     chunker : ChunkingSettings = Field(default_factory=ChunkingSettings)
     opensearch : OpenSearchSettings = Field(default_factory=OpenSearchSettings)
+    langfuse: LangfuseSettings = Field(default_factory=LangfuseSettings)
+    logfire: LogfireSettings = Field(default_factory=LogfireSettings)
+    litellm: LiteLLMSettings = Field(default_factory=LiteLLMSettings)
 
 
 

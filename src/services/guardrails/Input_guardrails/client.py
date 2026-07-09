@@ -1,12 +1,14 @@
 import logging
 import time
-from typing import Dict, Optional, Tuple, Union
+from typing import Dict, Optional
 
 from .input_limit import InputLimitsGuardrail
 from .llm_classify import LLmClassification
 from .PII import PIIGuardrail
 from .regex_classfy import RegrexClassification
 from src.exceptions import GuardrailError
+from src.schemas.guardrails.models import RegrexResult,GuardrailResult,GuardrailStatus,Category
+
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +43,7 @@ class InputGuardrails:
 
         logger.info("Input guardrails initialized")
 
-    def classify_input(self, query: str, user_id: str) -> Union[Dict, Tuple[Dict, str]]:
+    async def classify_input(self, query: str, user_id: str) -> GuardrailResult:
         """Run the full guardrail pipeline against a user query.
 
         Strategy:
@@ -55,18 +57,29 @@ class InputGuardrails:
         :param user_id: Identifier used for per-user limits and auditing
         :returns: A dict with a "reason" key if blocked by the limit check,
             a default-message dict if blocked by the regex classifier,
-            (llm_result, query) if the LLM classifier marks the query as
+            (llm_result) if the LLM classifier marks the query as
             "normal", or the raw llm_result dict otherwise
         :raises GuardrailError: if any underlying guardrail client raises
             an unexpected exception
         """
+
         if not query or not query.strip():
             logger.warning(f"Empty query provided for user {user_id}")
-            return {"reason": "Query cannot be empty."}
+            return GuardrailResult(
+                allowed=False,
+                status=GuardrailStatus.EMPTY_QUERY,
+                category=None,
+                reason="Query cannot be empty."
+                )
 
         if not user_id:
             logger.warning("Missing user_id for incoming query")
-            return {"reason": "user_id is required."}
+            return GuardrailResult(
+                allowed=False,
+                status=GuardrailStatus.MISSING_USER,
+                category=None,
+                reason="User Id is not provide."
+                )
 
         start_time = time.monotonic()
         logger.info(f"Guardrail pipeline started for user {user_id}")
@@ -74,28 +87,55 @@ class InputGuardrails:
         try:
             limit_result = self._check_input_limit(query, user_id)
             if limit_result is not None:
-                return limit_result
+                return GuardrailResult(
+                allowed=False,
+                status=GuardrailStatus.INPUT_LIMIT,
+                category=None,
+                reason=limit_result.reason
+                )
+            logger.info("Pass the Input limit guardrails")
 
             query = self._check_pii(query, user_id)
+            if not query or not query.strip():
+                logger.warning(f"Empty query after PII: {user_id}")
+                return GuardrailResult(
+                    allowed=False,
+                    status=GuardrailStatus.EMPTY_QUERY,
+                    category=None,
+                    reason="Empty get Query after Personal Identity Identifier."
+                    )
 
             regex_result = self._check_regex(query, user_id)
-            if regex_result is not None:
-                return regex_result
+            if regex_result.category.value != 'normal':
+                return GuardrailResult(
+                    allowed=False,
+                    status=GuardrailStatus.REGEX,
+                    category=regex_result.category,
+                    reason=self._build_regex_reason(regex_result)
+                    )
+            logger.info("Pass regex guardrails")
 
-            llm_result = self._check_llm(query, user_id)
+            llm_result = await self._check_llm(query, user_id)
         except Exception as e:
             logger.error(f"Unexpected error in guardrail pipeline for user {user_id}: {e}")
             raise GuardrailError(f"Guardrail pipeline failed for user_id={user_id}") from e
 
         elapsed_ms = (time.monotonic() - start_time) * 1000
         logger.info(f"Guardrail pipeline finished for user {user_id} in {elapsed_ms:.1f}ms")
-
-        if llm_result.get("answer") == "normal":
-            return llm_result, query
-
-        # Off-topic, sexual, racist, or any other unsafe classification.
-        logger.warning(f"Query flagged by LLM classifier for user {user_id}: {llm_result.get('answer')}")
-        return llm_result
+        
+        if llm_result.get('reason').category.value == 'normal':
+            return GuardrailResult(
+                    allowed=True,
+                    status=GuardrailStatus.OK,
+                    category=Category.NORMAL,
+                    reason=llm_result.get('reason').reason
+                    )
+        return GuardrailResult(
+                allowed=False,
+                status=GuardrailStatus.LLM_REJECT,
+                category=llm_result.get('reason').category.value,
+                reason=llm_result.get('reason').reason
+        )
 
     def _check_input_limit(self, query: str, user_id: str) -> Optional[Dict]:
         """Check per-user input limits.
@@ -132,7 +172,7 @@ class InputGuardrails:
 
         return query
 
-    def _check_regex(self, query: str, user_id: str) -> Optional[Dict]:
+    def _check_regex(self, query: str, user_id: str) -> RegrexResult:
         """Run regex-based classification on a query.
 
         :param query: Query to classify
@@ -143,14 +183,24 @@ class InputGuardrails:
         regex_check = self._regex_client.classify_input(query)
 
         if regex_check:
-            default_message = self._regex_client.get_default_message(regex_check)
-            if default_message:
-                logger.info(f"Blocked by regex classifier for user {user_id}: category={regex_check}")
-                return default_message
+            return regex_check
 
         return None
 
-    def _check_llm(self, query: str, user_id: str) -> Dict:
+    def _build_regex_reason(self, result: RegrexResult) -> str:
+        """Generate a detailed human-readable reason from a RegexResult.""" 
+        # if not result.matched or not result.matched_patterns: 
+        #     return "No regex rule matched." 
+        reasons = [] 
+        for match in result.matched_patterns: 
+            reasons.append( ( f"Matched keyword '{match['matched_text']}' "
+                            f"using regex pattern #{match['index']} " 
+                            f"({match['pattern']}) " 
+                            f"at character range {match['span']}." ) ) 
+        return ( f"The query was classified as '{result.category.value}' because " + " ".join(reasons) )
+
+
+    async def _check_llm(self, query: str, user_id: str) -> Dict:
         """Run LLM-based classification on a query.
 
         :param query: Query to classify
@@ -158,4 +208,4 @@ class InputGuardrails:
         :returns: The raw classification result dict from the LLM client
         """
         logger.debug(f"Checking LLM classification for user {user_id}")
-        return self._llm_classify_client.classify_result(query)
+        return await self._llm_classify_client.classify_result(query)

@@ -1,105 +1,98 @@
 import logging
-from typing import List
+from typing import List, Optional
 
-import httpx
-from src.schemas.embeddings.jina import JinaEmbeddingRequest, JinaEmbeddingResponse
+from openai import AsyncOpenAI
 
 logger = logging.getLogger(__name__)
 
 
-class JinaEmbeddingsClient:
-    """Client for Jina AI embeddings API.
+class EmbeddingsClient:
+    """Client for Jina AI embeddings via LiteLLM proxy server (OpenAI-compatible endpoint)."""
 
-    Uses Jina embeddings v3 model with 1024 dimensions optimized for retrieval.
-    Documentation: https://jina.ai/embeddings
-    """
-
-    def __init__(self, api_key: str, base_url: str = "https://api.jina.ai/v1"):
-        """Initialize Jina embeddings client.
-
-        :param api_key: Jina API key
-        :param base_url: API base URL
-        """
-        self.api_key = api_key
-        self.base_url = base_url
-        self.headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        }
-        self.client = httpx.AsyncClient(timeout=30.0)
-        logger.info("Jina embeddings client initialized")
+    def __init__(
+        self,
+        api_key: str,
+        api_base: str = "http://localhost:4000",
+        model: str = "jina-embed",
+        dimensions: int = 1024,
+    ):
+        self.model = model
+        self.dimensions = dimensions
+        self.client = AsyncOpenAI(api_key=api_key, base_url=api_base)
+        logger.info(f"Jina embeddings client initialized (model={model}, api_base={api_base})")
 
     async def embed_passages(self, texts: List[str], batch_size: int = 100) -> List[List[float]]:
-        """Embed text passages for indexing.
-
-        :param texts: List of text passages to embed
-        :param batch_size: Number of texts to process in each API call
-        :returns: List of embedding vectors
-        """
-        embeddings = []
+        embeddings: List[List[float]] = []
 
         for i in range(0, len(texts), batch_size):
             batch = texts[i : i + batch_size]
 
-            request_data = JinaEmbeddingRequest(
-                model="jina-embeddings-v3", task="retrieval.passage", dimensions=1024, input=batch
-            )
-
             try:
-                response = await self.client.post(
-                    f"{self.base_url}/embeddings", headers=self.headers, json=request_data.model_dump()
+                response = await self.client.embeddings.create(
+                    model=self.model,
+                    input=batch,
+                    extra_body={
+                        "dimensions": self.dimensions,
+                        "task": "retrieval.passage",
+                    },
                 )
-                response.raise_for_status()
 
-                result = JinaEmbeddingResponse(**response.json())
-                batch_embeddings = [item["embedding"] for item in result.data]
+                batch_embeddings = [item.embedding for item in response.data]
                 embeddings.extend(batch_embeddings)
 
                 logger.debug(f"Embedded batch of {len(batch)} passages")
 
-            except httpx.HTTPError as e:
-                logger.error(f"Error embedding passages: {e}")
-                raise
             except Exception as e:
-                logger.error(f"Unexpected error in embed_passages: {e}")
+                logger.error(f"Error embedding passages: {e}")
                 raise
 
         logger.info(f"Successfully embedded {len(texts)} passages")
         return embeddings
 
     async def embed_query(self, query: str) -> List[float]:
-        """Embed a search query.
-
-        :param query: Query text to embed
-        :returns: Embedding vector for the query
-        """
-        request_data = JinaEmbeddingRequest(model="jina-embeddings-v3", task="retrieval.query", dimensions=1024, input=[query])
-
         try:
-            response = await self.client.post(f"{self.base_url}/embeddings", headers=self.headers, json=request_data.model_dump())
-            response.raise_for_status()
+            response = await self.client.embeddings.create(
+                model=self.model,
+                input=[query],
+                extra_body={
+                    "dimensions": self.dimensions,
+                    "task": "retrieval.query",
+                },
+            )
 
-            result = JinaEmbeddingResponse(**response.json())
-            embedding = result.data[0]["embedding"]
-
+            embedding = response.data[0].embedding
             logger.debug(f"Embedded query: '{query[:50]}...'")
             return embedding
 
-        except httpx.HTTPError as e:
+        except Exception as e:
             logger.error(f"Error embedding query: {e}")
             raise
+
+    async def health_check(self) -> bool:
+        """Check whether the embeddings service is reachable and functioning.
+
+        Performs a minimal embedding call to verify both the LiteLLM proxy
+        and the upstream provider (Jina) are working end-to-end.
+
+        :returns: True if healthy, False otherwise
+        """
+        try:
+            response = await self.client.embeddings.create(
+                model=self.model,
+                input=["health check"],
+                extra_body={
+                    "dimensions": self.dimensions,
+                    "task": "retrieval.query",
+                },
+            )
+
+            if response.data and len(response.data[0].embedding) > 0:
+                logger.debug("Embeddings health check passed")
+                return True
+
+            logger.warning("Embeddings health check failed: empty response")
+            return False
+
         except Exception as e:
-            logger.error(f"Unexpected error in embed_query: {e}")
-            raise
-
-    async def close(self):
-        """Close the HTTP client."""
-        await self.client.aclose()
-
-    async def __aenter__(self):
-        """Async context manager entry."""
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Async context manager exit."""
-        await self.close()
+            logger.error(f"Embeddings health check failed: {e}")
+            return False

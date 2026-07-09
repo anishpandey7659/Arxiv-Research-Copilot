@@ -1,7 +1,7 @@
 import logging
 from typing import Dict, Optional
 
-from src.schemas.guardrails.models import InputGuardrailResult
+from src.schemas.guardrails.models import LLmGuardrailResult
 from src.services.guardrails.resources.prompt_classifier import (
     DEFAULT_REJECTION,
     GREETING_MESSAGE,
@@ -9,7 +9,7 @@ from src.services.guardrails.resources.prompt_classifier import (
     OFF_TOPIC_MESSAGE,
     REJECTION_MESSAGES,
 )
-from src.services.groq_llm.factory import make_groq_llm_client
+from src.services.LLM_gateway.factory import make_groq_llm_client
 from src.exceptions import LLmClassificationError
 
 logger = logging.getLogger(__name__)
@@ -31,9 +31,7 @@ class LLmClassification:
         :param model: Name of the Groq-hosted model to use for classification
         """
         self.model = model
-        self.llm_client = make_groq_llm_client().get_langchain_model(model)
-        self.llm_struture = self.llm_client.with_structured_output(InputGuardrailResult)
-
+        self.llm_client = make_groq_llm_client()
         logger.info(f"LLM classification client initialized with model={model}")
 
     def _build_prompt(self, query: str) -> str:
@@ -44,7 +42,7 @@ class LLmClassification:
         """
         return Input_prompt + f"\n {query}"
 
-    def _get_user_facing_response(self, classifier_output: InputGuardrailResult) -> Optional[str]:
+    def _get_user_facing_response(self, classifier_output: LLmGuardrailResult) -> Optional[str]:
         """Map a classification result to the message that should be shown to the user.
 
         :param classifier_output: Parsed classifier result, e.g. category
@@ -67,7 +65,7 @@ class LLmClassification:
 
         return classifier_output.category.value
 
-    def classify_result(self, query: str) -> Dict[str, Optional[object]]:
+    async def classify_result(self, query: str) -> Dict[str, Optional[object]]:
         """Run the full classification pipeline for a single query.
 
         :param query: Raw user input string
@@ -79,16 +77,19 @@ class LLmClassification:
             logger.warning("Empty query provided to LLM classifier")
             return {"answer": DEFAULT_REJECTION, "reason": None}
 
-        prompt = self._build_prompt(query)
         logger.debug("Invoking LLM for query classification")
 
         try:
-            result = self.llm_struture.invoke(prompt)
+            result = await self.llm_client.get_structured_response(
+                query=query,
+                system_prompt=Input_prompt,
+                schema_model=LLmGuardrailResult,
+                model_group='structured-output',
+            )
         except Exception as e:
             logger.error(f"LLM classification call failed: {e}")
             raise LLmClassificationError("LLM classification call failed") from e
 
-        answer = self._get_user_facing_response(result)
         logger.info(f"Query classified, category={result.category.value} unsafe={result.unsafe}")
 
-        return {"answer": answer, "reason": result}
+        return {"reason": result}
