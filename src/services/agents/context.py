@@ -38,7 +38,8 @@ class Context:
     guardrails_service: Optional[InputGuardrails] = None
     trace: Optional["LangfuseSpan"] = None
     langfuse_enabled: bool = False
-    model_name: str = "gpt-4o-mini"
+    category: Optional[str] = 'cs.AI'
+    model_name: str = "llama-3.3-70b-versatile"
     temperature: float = 0.0
     top_k: int = 3
     max_retrieval_attempts: int = 2

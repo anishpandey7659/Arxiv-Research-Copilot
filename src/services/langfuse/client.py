@@ -398,7 +398,8 @@ class LangfuseTracer:
     ):
         """Alias for update_span — called by agent nodes to close a span with output."""
         self.update_span(span, output=output, metadata=metadata, level=level, status_message=status_message)
-
+        span.end()
+        
     def update_span(
         self,
         span,

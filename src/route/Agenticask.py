@@ -43,8 +43,9 @@ async def ask_agentic(
         )
 
         return AgenticAskResponse(
-            query=result["query"],
-            answer=result["answer"],
+            user_id=request.user_id,
+            query=request.query,
+            answer=result.get("answer"),
             sources=result.get("sources", []),
             chunks_used=request.top_k,
             search_mode="hybrid" if request.use_hybrid else "bm25",
@@ -53,8 +54,10 @@ async def ask_agentic(
             rewritten_query=result.get("rewritten_query"),
             trace_id=result.get("trace_id"),
             guardrail_filter=result.get("guardrail_filter"),
-            output_guardrail_filter=result.get("output_guardrail_filter"),
+            model_use =result.get('model_use'),
+            execution_time = result.get('execution_time')
         )
+
 
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
