@@ -26,6 +26,7 @@ from src.services.pdf_parser.parser import PDFParserService
 # from src.services.telegram.bot import TelegramBot
 
 
+
 @lru_cache
 def get_settings() -> Settings:
     """Get application settings."""
@@ -125,6 +126,7 @@ def get_agentic_rag_service(
         guardrails_service=guardrails,
         settings=settings
     )
+
 
 
 AgenticRAGDep = Annotated[AgenticRAGService, Depends(get_agentic_rag_service)]

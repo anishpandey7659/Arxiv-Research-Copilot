@@ -1,4 +1,4 @@
-from typing import Any, List, Optional
+from typing import Any, List, Optional,Literal
 
 from pydantic import BaseModel, Field
 
@@ -128,5 +128,29 @@ class FeedbackResponse(BaseModel):
             "example": {
                 "success": True,
                 "message": "Feedback recorded successfully",
+            }
+        }
+
+
+class PaperSearchRequest(BaseModel):
+    "Request model for Arxiv paper search"
+
+    search_query : str = Field(..., description="Custom arXiv search query, or plain user text")
+    max_results : int =Field(5, ge=1, le=100, description="Maximum number of papers to fetch")
+    start: int = Field(0, ge=0, description="Starting index for pagination")
+    sort_by: Literal["submittedDate", "lastUpdatedDate", "relevance"] = Field(
+         "relevance", description="Sort criteria")
+    sort_order: Literal["ascending", "descending"] = Field(
+         "descending", description="Sort order"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "search_query": "Scaling Laws for Neural Language Models",
+                "max_results": 5,
+                "start": 0,
+                "sort_by": "relevance",
+                "sort_order": "descending",
             }
         }

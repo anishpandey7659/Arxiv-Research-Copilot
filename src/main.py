@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from src.route.Agenticask import router
+from src.route.searchpaper import arxivrouter 
 
 import logfire
 from src.config import get_settings
@@ -103,6 +104,7 @@ app = FastAPI(
 )
 
 app.include_router(router)
+app.include_router(arxivrouter)
 
 @app.get("/health")
 def health():
