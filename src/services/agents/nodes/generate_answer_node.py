@@ -29,7 +29,7 @@ async def ainvoke_generate_answer_step(
     :param runtime: Runtime context
     :returns: Dictionary with messages containing the generated answer
     """
-    logfire.info("NODE: generate_answer")
+    logger.info("NODE: generate_answer")
     start_time = time.time()
 
     # Get question and context
@@ -43,8 +43,8 @@ async def ainvoke_generate_answer_step(
         context = "No relevant documents found."
         logfire.warning("No context available for answer generation")
 
-    logfire.debug(f"Generating answer for query: {question[:100]}...")
-    logfire.debug(f"Using context of length: {len(context)} characters")
+    logger.debug(f"Generating answer for query: {question[:100]}...")
+    logger.debug(f"Using context of length: {len(context)} characters")
 
     # Extract document chunks preview for logging
     chunks_preview = []
@@ -83,7 +83,7 @@ async def ainvoke_generate_answer_step(
 
 
         # Invoke LLM for answer generation
-        logfire.info("Invoking LLM for answer generation")
+        logger.info("Invoking LLM for answer generation")
         
         response = await runtime.context.llm_client.get_response(
             query=answer_prompt, system_prompt=SYSTEM_PROMPT_ANSWER,
@@ -91,7 +91,7 @@ async def ainvoke_generate_answer_step(
             )
         answer =response.get("answer")
         model =response.get('model')
-        logfire.info(f"Generated answer of length: {len(answer)} characters")
+        logger.info(f"Generated answer of length: {len(answer)} characters")
 
         # Update span with successful result
         if span:

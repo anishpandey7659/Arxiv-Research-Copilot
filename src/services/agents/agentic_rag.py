@@ -15,7 +15,7 @@ from.tools import create_retriever_tool
 from src.services.opensearch.client import OpenSearchClient
 from src.services.embeddings.jina_client import EmbeddingsClient
 from.config import GraphConfig
-from src.services.LLM_gateway.client import LLMClient
+from src.services.llm_gateway.client import LLMClient
 from src.services.guardrails.Input_guardrails.client import InputGuardrails
 
 

@@ -9,7 +9,7 @@ from src.services.guardrails.resources.prompt_classifier import (
     OFF_TOPIC_MESSAGE,
     REJECTION_MESSAGES,
 )
-from src.services.LLM_gateway.factory import make_groq_llm_client
+from src.services.llm_gateway.factory import make_groq_llm_client
 from src.exceptions import LLmClassificationError
 
 logger = logging.getLogger(__name__)

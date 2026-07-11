@@ -27,7 +27,7 @@ async def ainvoke_retrieve_step(
     :param runtime: Runtime context containing max_retrieval_attempts
     :returns: Dictionary with updated state (retrieval_attempts, messages, original_query)
     """
-    logfire.info("NODE: retrieve")
+    logger.info("NODE: retrieve")
     start_time = time.time()
 
     messages = state["messages"]
@@ -41,7 +41,7 @@ async def ainvoke_retrieve_step(
     updates = {}
     if state.get("original_query") is None:
         updates["original_query"] = question
-        logfire.debug(f"Stored original query: {question[:100]}...")
+        logger.debug(f"Stored original query: {question[:100]}...")
 
     # Create span for retrieval initiation
     span = None
@@ -89,7 +89,7 @@ async def ainvoke_retrieve_step(
     # Increment retrieval attempts
     new_attempt_count = current_attempts + 1
     updates["retrieval_attempts"] = new_attempt_count
-    logfire.info(f"Retrieval attempt {new_attempt_count}/{max_attempts}")
+    logger.info(f"Retrieval attempt {new_attempt_count}/{max_attempts}")
 
     # Create tool call for retrieval
     updates["messages"] = [

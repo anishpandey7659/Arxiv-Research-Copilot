@@ -15,12 +15,16 @@ from src.schemas.litellm.models import ModelConfig
 
 MODEL_CONFIGS: list[ModelConfig] = [
     ModelConfig(name="chat", provider_model="groq/llama-3.3-70b-versatile", label="groq-llama3"),
-    ModelConfig(name="chat", provider_model="groq/gpt-oss-120b",             label="openai-via-groq"),
-    ModelConfig(name="structured-output", provider_model="groq/gpt-oss-120b",label="openai-via-groq"),
+    ModelConfig(name="chat", provider_model="openrouter/hy3-295B", label="hy3-fallback"),
     ModelConfig(name="chat", provider_model="gemini/gemini-2.5-flash",       label="gemini"),
+    ModelConfig(name="chat", provider_model="groq/gpt-oss-120b",             label="openai-via-groq"),
 
+    # Struture 
+    ModelConfig(name="structured-output", provider_model="gemini/gemini-2.5-flash",       label="gemini"),
+    ModelConfig(name="structured-output", provider_model="groq/llama-3.3-70b-versatile", label="structured-output"),
+    
     # fallback group: "chat-fallback" — only used if all "chat" deployments fail
-    ModelConfig(name="chat-fallback1", provider_model="gemini/gemini-2.5-flash", label="gemini-fallback"),
+    ModelConfig(name="chat-fallback1", provider_model="openrouter/nvidia/nemotron-3-ultra-550b-a55b:free", label="nemotron-fallback"),
     ModelConfig(name="chat-fallback2", provider_model="openrouter/hy3-295B", label="hy3-fallback"),
 
 ]

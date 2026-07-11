@@ -40,14 +40,14 @@ async def ainvoke_rewrite_query_step(
     :param runtime: Runtime context
     :returns: Dictionary with rewritten_query and updated messages
     """
-    logfire.info("NODE: rewrite_query")
+    logger.info("NODE: rewrite_query")
     start_time = time.time()
 
     # Get original query
     original_question = state.get("original_query") or state["messages"][0].content
     current_attempt = state.get("retrieval_attempts", 0)
 
-    logfire.debug(f"Rewriting query using LLM: {original_question[:100]}...")
+    logger.debug(f"Rewriting query using LLM: {original_question[:100]}...")
 
     # Create span for query rewriting
     span = None
@@ -72,21 +72,14 @@ async def ainvoke_rewrite_query_step(
 
     # Use LLM to rewrite the query intelligently
     try:
-        # Create structured LLM for query rewriting
-        llm = runtime.context.llm_client.get_langchain_model(
-            model=runtime.context.model_name,
-            temperature=0.3,  # Lower temperature for more focused rewriting
-        )
-        structured_llm = llm.with_structured_output(QueryRewriteOutput)
 
-        # Format prompt with original question
-        prompt = REWRITE_PROMPT.format(question=original_question)
-
-        logfire.debug(f"Invoking LLM for query rewriting (model: {runtime.context.model_name})")
+        logger.debug(f"Invoking LLM for query rewriting (model: {runtime.context.model_name})")
         llm_start = time.time()
 
-        # Get rewritten query from LLM
-        result: QueryRewriteOutput = await structured_llm.ainvoke(prompt)
+        # Create structured LLM for query rewriting
+        result: QueryRewriteOutput = await runtime.context.llm_client.get_structured_response(
+            query=original_question,schema_model=QueryRewriteOutput,
+            system_prompt=REWRITE_PROMPT)
 
         # Validate LLM output
         if not result or not result.rewritten_query:
@@ -99,11 +92,11 @@ async def ainvoke_rewrite_query_step(
         reasoning = result.reasoning
 
         llm_duration = time.time() - llm_start
-        logfire.info(
+        logger.info(
             f"Query rewritten in {llm_duration:.2f}s: "
             f"'{original_question[:50]}...' -> '{rewritten_query[:50]}...'"
         )
-        logfire.debug(f"Rewriting reasoning: {reasoning}")
+        logger.debug(f"Rewriting reasoning: {reasoning}")
 
     except Exception as e:
         logfire.error(f"Failed to rewrite query using LLM: {e}")

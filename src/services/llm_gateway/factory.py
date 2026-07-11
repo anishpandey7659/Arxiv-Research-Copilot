@@ -1,7 +1,7 @@
 from functools import lru_cache
 
 from src.config import get_settings
-from src.services.LLM_gateway.client import LLMClient
+from src.services.llm_gateway.client import LLMClient
 
 
 @lru_cache(maxsize=1)

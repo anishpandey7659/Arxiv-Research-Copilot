@@ -18,9 +18,6 @@ REWRITE_PROMPT = """You are a question re-writer that converts an input question
 
 Look at the initial question and try to reason about the underlying semantic intent or meaning.
 
-Here is the initial question:
-{question}
-
 Formulate an improved question that will retrieve more relevant documents.
 Provide only the improved question without any preamble or explanation."""
 

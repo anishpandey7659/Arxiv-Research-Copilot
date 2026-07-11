@@ -70,7 +70,7 @@ async def ainvoke_out_of_scope_step(
     :param runtime: Runtime context (not used in this node)
     :returns: Dictionary with messages containing the out-of-scope response
     """
-    logfire.info("NODE: out_of_scope")
+    logger.info("NODE: out_of_scope")
 
     question = get_latest_query(state["messages"])
     classifier_output: Optional[GuardrailScoring] = state.get("guardrail_result")
@@ -95,6 +95,6 @@ async def ainvoke_out_of_scope_step(
             "If you have a question about AI/ML research papers, I'd be happy to help!"
         )
 
-    logfire.info("Responding with out-of-scope message")
+    logger.info("Responding with out-of-scope message")
 
     return {"messages": [AIMessage(content=response_text)]}

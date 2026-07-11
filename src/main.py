@@ -9,8 +9,8 @@ from src.services.guardrails.Input_guardrails.factory import make_Input_guardrai
 from src.services.indexing.factory import make_hybrid_indexing_service
 from src.services.pdf_parser.factory import make_pdf_parser_service
 from src.services.langfuse.factory import make_langfuse_tracer
-from src.services.LLM_gateway.factory import make_groq_llm_client
-from src.services.Logfire.factory import configure_logfire
+from src.services.llm_gateway.factory import make_groq_llm_client
+from src.services.logfire.factory import configure_logfire
 from src.services.opensearch.factory import make_opensearch_client
 from src.services.agents.factory import make_agentic_rag_service
 from src.db.factory import make_database

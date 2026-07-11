@@ -4,7 +4,7 @@ from src.config import Settings, get_settings
 from src.services.guardrails.Input_guardrails.client import InputGuardrails
 from src.services.embeddings.jina_client import EmbeddingsClient
 from src.services.langfuse.client import LangfuseTracer
-from src.services.LLM_gateway.client import LLMClient
+from src.services.llm_gateway.client import LLMClient
 from src.services.opensearch.client import OpenSearchClient
 
 from .agentic_rag import AgenticRAGService

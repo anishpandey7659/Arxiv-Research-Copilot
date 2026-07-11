@@ -48,11 +48,11 @@ async def ainvoke_guardrail_step(
     :param runtime: Runtime context
     :returns: Dictionary with guardrail_result
     """
-    logfire.info("NODE: guardrail_validation")
+    logger.info("NODE: guardrail_validation")
     start_time = time.time()
 
     query = get_latest_query(state["messages"])
-    logfire.debug(f"Evaluating query: {query[:100]}...")
+    logger.debug(f"Evaluating query: {query[:100]}...")
 
     span = None
     if runtime.context.langfuse_enabled and runtime.context.trace:

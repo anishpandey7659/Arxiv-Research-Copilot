@@ -3,14 +3,17 @@ from typing import Any, Dict, List, Optional
 import groq
 from groq import Groq
 from pydantic import ValidationError,BaseModel
+from typing import TypeVar
 from groq import AsyncGroq
 from src.config import Settings
 from src.exceptions import GroqConnectionError, GroqLLMException, GroqTimeoutError
-from src.services.LLM_gateway.prompts.prompt import RAGPromptBuilder,ResponseParser
+from src.services.llm_gateway.prompts.prompt import RAGPromptBuilder,ResponseParser
 from .route import build_router
 from litellm import Router
+
 logger = logging.getLogger(__name__)
 
+T = TypeVar("T", bound=BaseModel)
 
 class LLMClient:
     """Client for OpenAI API — drop-in replacement for OllamaClient."""
@@ -31,10 +34,10 @@ class LLMClient:
     async def get_structured_response(
             self,
             query: str,
-            schema_model: type[BaseModel],
+            schema_model: type[T],
             system_prompt: str,
             model_group: str = "chat",
-        ):
+        )-> T:
             router = await self._ensure_router()  
             response = await router.acompletion(
                 model=model_group,
@@ -51,6 +54,7 @@ class LLMClient:
                 },
             )
             content = response.choices[0].message.content
+            assert content is not None
             try:
                 return schema_model.model_validate_json(content)
             except ValidationError as e:

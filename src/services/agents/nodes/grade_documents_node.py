@@ -30,7 +30,7 @@ async def ainvoke_grade_documents_step(
     :param runtime: Runtime context
     :returns: Dictionary with routing_decision and grading_results
     """
-    logfire.info("NODE: grade_documents")
+    logger.info("NODE: grade_documents")
     start_time = time.time()
 
     # Get query and context
@@ -81,7 +81,7 @@ async def ainvoke_grade_documents_step(
 
         return {"routing_decision": "rewrite_query", "grading_results": []}
 
-    logfire.debug(f"Grading context of length {len(context)} characters")
+    logger.debug(f"Grading context of length {len(context)} characters")
 
     # Use LLM to grade document relevance (plain text — avoids structured output failures on small models)
     try:
@@ -90,7 +90,7 @@ async def ainvoke_grade_documents_step(
             question=question,
         )
 
-        logfire.info("Invoking LLM for document grading ")
+        logger.info("Invoking LLM for document grading ")
         grade_result = await runtime.context.llm_client.get_structured_response(
             query=grading_prompt,
             system_prompt="",
@@ -106,7 +106,7 @@ async def ainvoke_grade_documents_step(
         if grade_result.binary_score == 'no':
             is_relevant = False
 
-        logfire.info(f"LLM grading result: is_relevant={is_relevant}, response_snippet={grade_result.reasoning}")
+        logger.info(f"LLM grading result: is_relevant={is_relevant}, response_snippet={grade_result.reasoning}")
 
         grading_result = GradingResult(
             document_id="retrieved_docs",
@@ -127,7 +127,7 @@ async def ainvoke_grade_documents_step(
     # Determine routing
     route = "generate_answer" if is_relevant else "rewrite_query"
 
-    logfire.info(f"Grading result: {'relevant' if is_relevant else 'not relevant'}, routing to: {route}")
+    logger.info(f"Grading result: {'relevant' if is_relevant else 'not relevant'}, routing to: {route}")
 
     # Update span with grading result
     if span:
