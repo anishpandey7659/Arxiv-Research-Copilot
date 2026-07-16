@@ -106,6 +106,25 @@ class PostgreSQLDatabase(BaseDatabase):
         except Exception as e:
             logger.error(f"Failed to initialize PostgreSQL database: {e}")
             raise
+    
+    def health_check(self) -> bool:
+        """Check if the database connection is alive and responsive.
+
+        Returns True if the database is reachable, False otherwise.
+        Does not raise — safe to call from a health/readiness endpoint.
+        """
+        if not self.engine:
+            logger.warning("Health check failed: database not initialized")
+            return False
+
+        try:
+            with self.engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            return True
+        except Exception as e:
+            logger.error(f"Database health check failed: {e}")
+            return False
+
 
     def teardown(self) -> None:
         """Close the database connection."""

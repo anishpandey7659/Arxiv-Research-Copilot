@@ -1,5 +1,6 @@
 import logging
 from typing import Dict,List,cast
+import time
 
 from src.models.paper import Paper
 
@@ -105,12 +106,15 @@ class HybridIndexingService:
         :param replace_existing: If True, delete existing chunks before indexing
         :returns: Aggregated statistics
         """
+        
+        start_time = time.perf_counter()
         total_stats = {
             "papers_processed": 0,
             "total_chunks_created": 0,
             "total_chunks_indexed": 0,
             "total_embeddings_generated": 0,
             "total_errors": 0,
+            "total_time_seconds": 0.0,
         }
 
         for paper in papers:
@@ -129,10 +133,14 @@ class HybridIndexingService:
             total_stats["total_chunks_indexed"] += stats["chunks_indexed"]
             total_stats["total_embeddings_generated"] += stats["embeddings_generated"]
             total_stats["total_errors"] += stats["errors"]
+            total_stats["total_time_seconds"] = round(
+                time.perf_counter() - start_time, 2
+            )
 
         logger.info(
             f"Batch indexing complete: {total_stats['papers_processed']} papers, "
             f"{total_stats['total_chunks_indexed']} chunks indexed"
+            f"{total_stats['total_time_seconds']}s"
         )
 
         return total_stats

@@ -9,7 +9,7 @@ from src.services.guardrails.resources.prompt_classifier import (
     OFF_TOPIC_MESSAGE,
     REJECTION_MESSAGES,
 )
-from src.services.llm_gateway.factory import make_groq_llm_client
+from src.services.llm_gateway.factory import make_llm_client
 from src.exceptions import LLmClassificationError
 
 logger = logging.getLogger(__name__)
@@ -31,7 +31,7 @@ class LLmClassification:
         :param model: Name of the Groq-hosted model to use for classification
         """
         self.model = model
-        self.llm_client = make_groq_llm_client()
+        self.llm_client = make_llm_client()
         logger.info(f"LLM classification client initialized with model={model}")
 
     def _build_prompt(self, query: str) -> str:

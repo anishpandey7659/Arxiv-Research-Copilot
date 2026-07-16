@@ -1,6 +1,6 @@
 from functools import lru_cache
 from typing import TYPE_CHECKING, Annotated, Generator, Optional
-
+from arq.connections import ArqRedis
 if TYPE_CHECKING:
     from fastapi import Depends, Request
     from sqlalchemy.orm import Session
@@ -23,6 +23,7 @@ from src.services.guardrails.Input_guardrails.client import InputGuardrails
 from src.services.llm_gateway.client import LLMClient
 from src.services.opensearch.client import OpenSearchClient
 from src.services.pdf_parser.parser import PDFParserService
+from src.services.paperIngestion.client import PaperIngestionPipeline
 # from src.services.telegram.bot import TelegramBot
 
 
@@ -42,6 +43,11 @@ def get_database(request: Request) -> BaseDatabase:
     """Get database from the request state."""
     return request.app.state.database
 
+async def get_redis(request: Request) -> ArqRedis:
+    return request.app.state.redis
+
+async def get_paper_ingestion_pipeline(request: Request) -> PaperIngestionPipeline:
+    return request.app.state.paper_ingestion_pipeline
 
 def get_db_session(database: Annotated[BaseDatabase, Depends(get_database)]) -> Generator[Session, None, None]:
     """Get database session dependency."""
@@ -105,6 +111,9 @@ EmbeddingsDep = Annotated[EmbeddingsClient, Depends(get_embeddings_service)]
 LLMDep = Annotated[LLMClient, Depends(get_llm_client)]
 GuardrailsDep = Annotated[InputGuardrails, Depends(get_guardrails_service)]
 LangfuseDep = Annotated[LangfuseTracer, Depends(get_langfuse_tracer)]
+RedisDep = Annotated[LangfuseTracer, Depends(ArqRedis)]
+IngestionDep = Annotated[PaperIngestionPipeline, Depends(get_paper_ingestion_pipeline)]
+
 # CacheDep = Annotated[CacheClient | None, Depends(get_cache_client)]
 # TelegramDep = Annotated[Optional[TelegramBot], Depends(get_telegram_service)]
 

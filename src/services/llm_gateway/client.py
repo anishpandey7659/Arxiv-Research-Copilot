@@ -1,15 +1,16 @@
 import logging
 from typing import Any, Dict, List, Optional
 import groq
-from groq import Groq
+import time
 from pydantic import ValidationError,BaseModel
 from typing import TypeVar
-from groq import AsyncGroq
 from src.config import Settings
 from src.exceptions import GroqConnectionError, GroqLLMException, GroqTimeoutError
 from src.services.llm_gateway.prompts.prompt import RAGPromptBuilder,ResponseParser
 from .route import build_router
-from litellm import Router
+from src.services.llm_gateway.route import MODEL_CONFIGS
+from litellm.router import Router
+from openai import AsyncOpenAI
 
 logger = logging.getLogger(__name__)
 
@@ -19,12 +20,15 @@ class LLMClient:
     """Client for OpenAI API — drop-in replacement for OllamaClient."""
 
     def __init__(self, settings: Settings):
-        self.api_key = settings.groq_api_key
-        self.timeout = settings.groq_timeout
+        self.api_key = settings.litellm.virtual_key
+        self.base_url = settings.litellm.api_base
+        self.client = AsyncOpenAI(
+        api_key=self.api_key,
+        base_url=self.base_url
+        )
         self.prompt_builder = RAGPromptBuilder()
         self.llm: Optional[Router] = None 
         self.response_parser = ResponseParser()
-        self._async_client: Optional[AsyncGroq] = None
 
     async def _ensure_router(self) -> Router:
         if self.llm is None:
@@ -95,31 +99,46 @@ class LLMClient:
             logger.error(f"Error generating response: {e}")
             raise GroqLLMException(f"Failed to generate response: {e}")
 
-    async def health_check(self) -> Dict[str, Any]:
-        """Check Groq API connectivity."""
-        try:
-            router = await self._ensure_router()
-            models = await router.acompletion(
-                model="chat",
-                messages=[{"role": "user", "content": "What is the capital of France?"}]
-            )
-            return {
-                "status": "healthy",
-                "message": "Groq API is reachable",
-                "model_count": len(list(models)),
-            }
-        except groq.AuthenticationError as e:
-            raise GroqLLMException(f"Groq authentication failed — check GROQ_API_KEY: {e}")
-        except groq.APITimeoutError as e:
-            raise GroqTimeoutError(f"Groq API timed out: {e}")
-        except groq.APIConnectionError as e:
-            raise GroqConnectionError(f"Cannot reach Groq API: {e}")
-        except groq.RateLimitError as e:
-            raise GroqLLMException(f"Groq rate limit exceeded: {e}")
-        except groq.APIStatusError as e:
-            raise GroqLLMException(f"Groq API returned status {e.status_code}: {e}")
-        except Exception as e:
-            raise GroqLLMException(f"Groq health check failed: {e}")
+
+
+    async def health_check(self) -> dict:
+        """Check connectivity to all configured LLM providers."""
+
+        results = {}
+
+        for config in MODEL_CONFIGS:
+            start = time.perf_counter()
+
+            try:
+                await self.client.chat.completions.create(
+                    model=config.provider_model,
+                    messages=[{"role": "user", "content": "ping"}],
+                    max_tokens=1,
+                )
+
+                results[config.label] = {
+                    "status": "healthy",
+                    "latency_ms": round((time.perf_counter() - start) * 1000, 2),
+                }
+
+            except Exception as e:
+                results[config.label] = {
+                    "status": "unhealthy",
+                    "latency_ms": round((time.perf_counter() - start) * 1000, 2),
+                    "error": str(e),
+                }
+
+        healthy_models = sum(
+            model["status"] == "healthy"
+            for model in results.values()
+        )
+
+        return {
+            "healthy": healthy_models > 0,
+            "healthy_models": healthy_models,
+            "total_models": len(results),
+            "models": results,
+        }
 
     async def generate_rag_answer(
         self,

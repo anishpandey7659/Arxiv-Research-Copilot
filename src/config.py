@@ -62,7 +62,23 @@ class ChunkingSettings(BaseConfigSettings):
     overlap_size : int = 100
     min_chunk_size : int = 100
     section_based: bool = True  # Use section-based chunking when available
-    
+
+
+
+class RedisSettings(BaseConfigSettings):
+    model_config = SettingsConfigDict(
+        env_file=[".env", str(ENV_FILE_PATH)],
+        env_prefix="REDIS__",
+        extra="ignore",
+        frozen=True,
+        case_sensitive=False,
+    )
+
+    url: str = "redis://localhost:6379"
+    ttl_hours: int = 6
+
+
+
 class OpenSearchSettings(BaseConfigSettings):
     model_config = SettingsConfigDict(
         env_file=[".env", str(ENV_FILE_PATH)],
@@ -146,7 +162,7 @@ class LiteLLMSettings(BaseConfigSettings):
     )
 
     api_base: str = "http://localhost:4000"
-    master_key: str = ""
+    virtual_key: str = ""
     timeout: float = 30.0
 
     routing_strategy: Literal[
@@ -180,9 +196,6 @@ class Settings(BaseConfigSettings):
     postgres_pool_size: int = 5
     postgres_max_overflow: int = 0
 
-    groq_api_key: str = ""
-    groq_model: str = "openai/gpt-oss-120b"
-    groq_timeout: int = 300
 
     jina_api_key: str = Field(validation_alias="JINA_API_KEY")
 
@@ -196,6 +209,7 @@ class Settings(BaseConfigSettings):
     langfuse: LangfuseSettings = Field(default_factory=LangfuseSettings)
     logfire: LogfireSettings = Field(default_factory=LogfireSettings)
     litellm: LiteLLMSettings = Field(default_factory=LiteLLMSettings)
+    redis: RedisSettings = Field(default_factory=RedisSettings)
 
 
 

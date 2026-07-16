@@ -1,7 +1,8 @@
-from fastapi import FastAPI
+from fastapi import FastAPI,Request
 from src.route.Agenticask import router
 from src.route.searchpaper import arxivrouter 
-
+from src.route.paperIngestion import ingestionrouter 
+from fastapi.responses import JSONResponse
 import logfire
 from src.config import get_settings
 from src.services.arxiv.factory import make_arxiv_client
@@ -10,12 +11,15 @@ from src.services.guardrails.Input_guardrails.factory import make_Input_guardrai
 from src.services.indexing.factory import make_hybrid_indexing_service
 from src.services.pdf_parser.factory import make_pdf_parser_service
 from src.services.langfuse.factory import make_langfuse_tracer
-from src.services.llm_gateway.factory import make_groq_llm_client
+from src.services.llm_gateway.factory import make_llm_client
 from src.services.logfire.factory import configure_logfire
 from src.services.opensearch.factory import make_opensearch_client
 from src.services.agents.factory import make_agentic_rag_service
-from src.db.factory import make_database
+from src.services.paperIngestion.factory import get_paperIngestion
 
+from src.db.factory import make_database
+from arq import create_pool
+from arq.connections import RedisSettings
 from contextlib import asynccontextmanager
 import logging
 # Setup logging
@@ -25,9 +29,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-import logfire
-logfire.configure()
-logfire.instrument_system_metrics()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -42,8 +43,16 @@ async def lifespan(app: FastAPI):
     app.state.indexing_client   = make_hybrid_indexing_service()
     app.state.pdf_parser_client = make_pdf_parser_service()
     app.state.langfuse_client   = make_langfuse_tracer()
-    app.state.llm_client        = make_groq_llm_client()
+    app.state.llm_client        = make_llm_client()
     
+    # ARQ redis pool — used to enqueue ingestion jobs onto the worker queue
+    app.state.redis = await create_pool(RedisSettings())
+    logger.info("ARQ redis pool connected")
+
+    app.state.paper_ingestion_pipeline = get_paperIngestion(
+        max_concurrent_downloads=8,
+        max_concurrent_parses=4,
+    )
 
     database = make_database()
     app.state.database = database
@@ -51,6 +60,7 @@ async def lifespan(app: FastAPI):
     
     configure_logfire(settings)
     if settings.logfire.enabled:
+        logfire.instrument_system_metrics()
         logfire.instrument_fastapi(app, request_attributes_mapper=_skip_health)
 
     # Initialize search service
@@ -85,7 +95,7 @@ async def lifespan(app: FastAPI):
     app.state.agentic_rag_service = agentic_rag_service
 
     yield
-
+    await app.state.redis.close()
     database.teardown()
     logger.info("API shutdown complete")
 
@@ -102,13 +112,63 @@ app = FastAPI(
     version=os.getenv("APP_VERSION", "0.1.0"),
     lifespan=lifespan,
 )
-
+app.include_router(ingestionrouter)
 app.include_router(router)
 app.include_router(arxivrouter)
 
-@app.get("/health")
-def health():
-    return {'status':"ok"}
+def _is_ok(v):
+    if isinstance(v, dict):
+        return v.get("status") == "ok"
+    return v == "ok"
 
+@app.get("/health")
+async def health(request: Request):
+    checks = {}
+
+    # LLM Check
+    try:
+        llm_health = await request.app.state.llm_client.health_check()
+
+        checks["llm_client"] = {
+            "status": "ok" if llm_health["healthy"] else "unhealthy",
+            "healthy_models": llm_health["healthy_models"],
+            "total_models": llm_health["total_models"],
+        }
+    except Exception as e:
+        checks["llm_client"] = {"status": "error", "error": str(e)}
+    
+    # OpenSearch
+    try:
+        checks["opensearch"] = "ok" if request.app.state.opensearch_client.health_check() else "unhealthy"
+    except Exception as e:
+        checks["opensearch"] = f"error: {e}"
+
+    # Redis (ARQ pool)
+    try:
+        await request.app.state.redis.ping()
+        checks["redis"] = "ok"
+    except Exception as e:
+        checks["redis"] = f"error: {e}"
+
+    # Database
+    try:
+        request.app.state.database.health_check()  # adjust to your DB client's actual method
+        checks["database"] = "ok"
+    except Exception as e:
+        checks["database"] = f"error: {e}"
+
+    # Embedding
+    try:
+        request.app.state.embedding_client.health_check_all()
+        checks["embedding"] = "ok"
+    except Exception as e:
+        checks["embedding"] = f"error: {e}"
+
+    healthy = all(_is_ok(v) for v in checks.values())
+    status_code = 200 if healthy else 503
+    return JSONResponse(
+        status_code=status_code,
+        content={"status": "ok" if healthy else "degraded", "checks": checks},
+    )
 
 # uvicorn src.main:app --reload

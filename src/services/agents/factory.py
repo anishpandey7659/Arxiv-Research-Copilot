@@ -40,12 +40,10 @@ def make_agentic_rag_service(
         settings = get_settings()
 
     # Pick the model ID based on provider
-    model = settings.groq_model
 
     graph_config = GraphConfig(
         top_k=top_k,
         use_hybrid=use_hybrid,
-        model=model,
     )
 
     return AgenticRAGService(

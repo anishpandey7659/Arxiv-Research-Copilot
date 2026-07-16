@@ -1,7 +1,7 @@
 import logging
 import os
 from typing import Any
-from litellm import ModelConfig, Router
+from litellm.router import Router 
 from src.config import get_settings
 settings = get_settings()
 # Logging
@@ -13,21 +13,25 @@ logger = logging.getLogger("llm_router")
 
 from src.schemas.litellm.models import ModelConfig
 
+
 MODEL_CONFIGS: list[ModelConfig] = [
-    ModelConfig(name="chat", provider_model="groq/llama-3.3-70b-versatile", label="groq-llama3"),
-    ModelConfig(name="chat", provider_model="openrouter/hy3-295B", label="hy3-fallback"),
-    ModelConfig(name="chat", provider_model="gemini/gemini-2.5-flash",       label="gemini"),
-    ModelConfig(name="chat", provider_model="groq/gpt-oss-120b",             label="openai-via-groq"),
+    # Chat group
+    ModelConfig(name="chat",provider_model="groq/llama-3.3-70b-versatile",label="groq-llama3",),
+    ModelConfig(name="chat",provider_model="openrouter/tencent/hy3:free",label="hy3-openrouter",),
+    ModelConfig(name="chat",provider_model="gemini/gemini-2.5-flash",label="gemini",),
+    ModelConfig(name="chat",provider_model="groq/openai/gpt-oss-120b",label="groq-gpt-oss",),
 
-    # Struture 
-    ModelConfig(name="structured-output", provider_model="gemini/gemini-2.5-flash",       label="gemini"),
-    ModelConfig(name="structured-output", provider_model="groq/llama-3.3-70b-versatile", label="structured-output"),
-    
-    # fallback group: "chat-fallback" — only used if all "chat" deployments fail
-    ModelConfig(name="chat-fallback1", provider_model="openrouter/nvidia/nemotron-3-ultra-550b-a55b:free", label="nemotron-fallback"),
-    ModelConfig(name="chat-fallback2", provider_model="openrouter/hy3-295B", label="hy3-fallback"),
+    # Structured output
+    ModelConfig(name="structured-output",provider_model="gemini/gemini-2.5-flash",label="gemini",),
+    ModelConfig(name="structured-output",provider_model="groq/llama-3.3-70b-versatile",label="groq-llama3",),
 
+    # Fallbacks
+    ModelConfig(name="chat-fallback1",provider_model="openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",label="nemotron",),
+    ModelConfig(name="chat-fallback2",provider_model="openrouter/tencent/hy3:free",label="hy3-openrouter",),
+
+    ModelConfig(name="Fall-back-structured-output",provider_model="cerebras/gpt-oss-120b",label="cerebras-gpt",),
 ]
+
 
 def build_model_list(configs: list[ModelConfig]) -> list[dict[str, Any]]:
     model_list = []
@@ -65,6 +69,7 @@ async def build_router(configs: list[ModelConfig] | None = None) -> Router:
         cooldown_time=settings.litellm.cooldown_time,
         fallbacks=[
                 {"chat": ["chat-fallback1", "chat-fallback2"]},
+                {"structured-output": ["Fall-back-structured-output"]},
             ],
     )
     logger.info("Router initialized with strategy=%s, %d models", strategy, len(configs))

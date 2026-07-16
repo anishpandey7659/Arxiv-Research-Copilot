@@ -1,5 +1,5 @@
 from src.services.opensearch.factory import make_opensearch_client_fresh
-from src.services.llm_gateway.factory import make_groq_llm_client
+from src.services.llm_gateway.factory import make_llm_client
 from src.services.guardrails.Input_guardrails.factory import make_Input_guardrails
 from src.services.embeddings.factory import make_embeddings_service
 from src.services.langfuse.factory import make_langfuse_tracer
@@ -9,7 +9,7 @@ from src.services.agents.agentic_rag import AgenticRAGService
 rag=AgenticRAGService(
                     make_opensearch_client_fresh(host="http://localhost:9200"),
                     make_embeddings_service(),
-                    make_groq_llm_client(),
+                    make_llm_client(),
                     make_Input_guardrails(),
                     make_langfuse_tracer()
                     )

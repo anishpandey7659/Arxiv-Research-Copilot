@@ -153,4 +153,26 @@ class PaperSearchRequest(BaseModel):
                 "sort_by": "relevance",
                 "sort_order": "descending",
             }
+   
+        }
+class FetchPapersRequest(BaseModel):
+    "Fetch the paper from Arxiv paper "
+
+    max_results: int = Field(10, ge=1, le=100)
+    start: int = Field(0, ge=0)
+    sort_by: Literal["submittedDate","lastUpdatedDate"] = "submittedDate"
+    sort_order: Literal["ascending","descending"] = "descending"
+    from_date: Optional[str] = Field(None,description="Format: YYYYMMDD")
+    to_date: Optional[str] = Field(None,description="Format: YYYYMMDD")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "max_results": 10,
+                "start": 0,
+                "sort_by": "submittedDate",
+                "sort_order": "descending",
+                "from_date": "20260701",
+                "to_date": "20260716"
+            }
         }
