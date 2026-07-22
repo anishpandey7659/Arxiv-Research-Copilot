@@ -76,7 +76,11 @@ class RedisSettings(BaseConfigSettings):
 
     url: str = "redis://localhost:6379"
     ttl_hours: int = 6
-
+    host     : str
+    port     : int
+    username : str
+    password : str 
+    ssl      : bool
 
 
 class OpenSearchSettings(BaseConfigSettings):
@@ -197,7 +201,7 @@ class Settings(BaseConfigSettings):
     postgres_max_overflow: int = 0
 
 
-    jina_api_key: str = Field(validation_alias="JINA_API_KEY")
+    # jina_api_key: str = Field(validation_alias="JINA_API_KEY")
 
     Input_limit_max_tokens:int = 2000
     max_requests_per_minute:int = 10

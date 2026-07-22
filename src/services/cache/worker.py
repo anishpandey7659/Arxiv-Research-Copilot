@@ -3,10 +3,11 @@ from __future__ import annotations
 
 import logfire
 from arq.connections import RedisSettings
+from src.config import get_settings
 from src.services.paperIngestion.factory import get_paperIngestion
 from src.services.paperIngestion.client import PaperIngestionPipeline
 
-
+settings = get_settings()
 
 async def startup(ctx: dict) -> None:
     logfire.configure()
@@ -48,6 +49,11 @@ class WorkerSettings:
     functions = [pdf_process_pipeline]
     on_startup = startup
     on_shutdown = shutdown
-    redis_settings = RedisSettings()
+    redis_settings =  RedisSettings(
+                host= settings.redis.host,
+                port=settings.redis.port,
+                username=settings.redis.username,
+                password=settings.redis.password,
+                ssl=settings.redis.ssl)
     max_jobs = 8
     job_timeout = 600

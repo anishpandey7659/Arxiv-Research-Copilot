@@ -1,6 +1,6 @@
 import logging
 
-import redis
+import redis.asyncio as redis
 from src.config import Settings
 from src.services.cache.client import CacheClient
 
@@ -19,7 +19,6 @@ def make_redis_client(settings: Settings) -> redis.Redis:
             retry_on_timeout=True,
             retry_on_error=[redis.ConnectionError, redis.TimeoutError],
         )
-        client.ping()
         logger.info(f"Connected to Redis at {url.split('@')[-1] if '@' in url else url}")
         return client
     except redis.ConnectionError as e:

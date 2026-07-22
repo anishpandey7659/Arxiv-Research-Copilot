@@ -1,0 +1,93 @@
+  model_list:
+
+  # LLM Model
+  - model_name: gpt-oss-120b
+    litellm_params:
+      model: groq/openai/gpt-oss-120b
+      api_key: os.environ/GROQ_API_KEY
+
+  - model_name: gemini-2.5-flash
+    litellm_params:
+      model: gemini/gemini-2.5-flash
+      api_key: os.environ/GEMINI_API_KEY
+
+
+  - model_name: llama-3.3-70b-versatile
+    litellm_params:
+      model: groq/llama-3.3-70b-versatile
+      api_key: os.environ/GROQ_API_KEY
+
+  - model_name: cerebras-gpt-oss-120b
+    litellm_params:
+      model: cerebras/gpt-oss-120b
+      api_key: os.environ/CEREBRAS_API_KEY
+
+  - model_name: mistralai-small
+    litellm_params:
+      model: mistral/devstral-small-latest
+      api_key: os.environ/MISTRALAI_API_KEY
+
+
+
+  - model_name: ultra-550b
+    litellm_params:
+      model: openrouter/nvidia/nemotron-3-ultra-550b-a55b:free
+      api_key: os.environ/OPENROUTER_API_KEY
+  
+  - model_name: hy3-295B
+    litellm_params:
+      model: openrouter/tencent/hy3:free
+      api_key: os.environ/OPENROUTER_API_KEY
+
+  # Embedding model
+
+  - model_name: cohere-embed
+    litellm_params:
+      model: cohere/embed-english-v3.0
+      api_key: os.environ/COHERE_API_KEY
+
+  - model_name: jina-embed
+    litellm_params:
+      model: jina_ai/jina-embeddings-v3
+      api_key: os.environ/JINA_AI_API_KEY
+
+  - model_name: voyage-embed
+    litellm_params:
+      model: voyage/voyage-3.5
+      api_key: os.environ/VOYAGE_API_KEY
+
+  litellm_settings:
+    drop_params: true
+    set_verbose: false
+    num_retries: 2
+    request_timeout: 600
+    success_callback: ["prometheus"]
+    failure_callback: ["prometheus"]
+
+  router_settings:
+    # Routing strategy for load balancing
+    routing_strategy: least-busy  # or "least-busy" for better LB
+  
+     # Specific retry policy per error type
+    retry_policy:
+      AuthenticationErrorRetries: 2
+      TimeoutErrorRetries: 3          # More retries for timeouts
+      RateLimitErrorRetries: 4        # More retries for rate limits
+      InternalServerErrorRetries: 3
+  
+     # Auto-cooldown unhealthy deployments
+    allowed_fails: 3                  # Cooldown after 3 failures per minute
+    cooldown_time: 60                 # Cooldown for 60 seconds
+  
+     # Fallback routing - try next model if primary fails
+    fallbacks:
+        - gpt-oss-120b: ["llama-3.3-70b-versatile", "gemini-2.5-flash"]
+        - gemini-2.5-flash: ["gpt-oss-120b", "llama-3.3-70b-versatile"]
+        - llama-3.3-70b-versatile: ["gemini-2.5-flash", "gpt-oss-120b"]
+
+
+    general_settings:
+      master_key: os.environ/LITELLM_MASTER_KEY
+      service_callbacks: ["prometheus"]
+      database_url: os.environ/DATABASE_URL
+      store_model_in_db: true

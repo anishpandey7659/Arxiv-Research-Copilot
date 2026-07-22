@@ -17,5 +17,12 @@ data/arxiv_pdfs/
 
 text.ipynb
 
+test.py
+
+tests
+
+pgdata
+
 workflows
+
 .logfire

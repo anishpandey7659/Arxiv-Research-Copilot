@@ -1,7 +1,7 @@
 from src.schemas.api.ask import PaperSearchRequest,FetchPapersRequest
 from src.schemas.arxiv.paper import ArxivPaper
 from fastapi import APIRouter, HTTPException,Query
-from src.dependencies import  ArxivDep
+from src.dependencies import  ArxivDep ,PaperRepoDep 
 
 
 arxivrouter = APIRouter(prefix="/api/v1", tags=["search-paper"])
@@ -55,3 +55,37 @@ async def fetch_paper(request:FetchPapersRequest,arxiv_client:ArxivDep):
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch papers: {str(e)}")
+    
+
+@arxivrouter.get("/papers/store_paper", response_model=list[ArxivPaper])
+async def total_paper_store(repo: PaperRepoDep):
+    """
+    Fetch the stored paper metadata
+    """
+    try:
+        papers = repo.get_all()
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to fetch stored papers",
+        ) from e
+
+    return papers
+
+@arxivrouter.get("/papers/paper_count")
+async def paper_count(repo: PaperRepoDep):
+    """
+    Total paper store in DB
+    """
+    try:
+        count = repo.get_count()
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to fetch papers count",
+        ) from e
+
+    return count
+
+
+

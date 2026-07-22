@@ -2,12 +2,15 @@ import hashlib
 import json
 import logging
 from datetime import timedelta
-from typing import Optional
+from typing import Optional,TypeVar,Type
+from pydantic import BaseModel
 
-import redis
+import redis.asyncio as redis
 from src.config import RedisSettings
 from src.schemas.api.ask import AskRequest, AskResponse
 
+
+ResponseT = TypeVar("ResponseT", bound=BaseModel)
 logger = logging.getLogger(__name__)
 
 
@@ -30,25 +33,22 @@ class CacheClient:
         key_hash = hashlib.sha256(key_string.encode()).hexdigest()[:16]
         return f"exact_cache:{key_hash}"
 
-    async def find_cached_response(self, request: AskRequest) -> Optional[AskResponse]:
-        """Find cached response for exact query match."""
+    async def find_cached_response(
+        self, request: AskRequest, response_model: Type[ResponseT]
+    ) -> Optional[ResponseT]:
         try:
             cache_key = self._generate_cache_key(request)
-
-            # Simple Redis GET operation - O(1)
-            cached_response = self.redis.get(cache_key)
+            cached_response = await self.redis.get(cache_key)
 
             if cached_response:
                 try:
                     response_data = json.loads(cached_response)
-                    logger.info(f"Cache hit for exact query match")
-                    return AskResponse(**response_data)
+                    logger.info("Cache hit for exact query match")
+                    return response_model(**response_data)
                 except json.JSONDecodeError as e:
                     logger.warning(f"Failed to deserialize cached response: {e}")
                     return None
-
             return None
-
         except Exception as e:
             logger.error(f"Error checking cache: {e}")
             return None
@@ -59,7 +59,7 @@ class CacheClient:
             cache_key = self._generate_cache_key(request)
 
             # Simple Redis SET operation with TTL
-            success =  self.redis.set(cache_key, response.model_dump_json(), ex=self.ttl)
+            success =  await self.redis.set(cache_key, response.model_dump_json(), ex=self.ttl)
 
             if success:
                 logger.info(f"Stored response in exact cache with key {cache_key[:16]}...")
@@ -71,3 +71,7 @@ class CacheClient:
         except Exception as e:
             logger.error(f"Error storing in cache: {e}")
             return False
+    
+    async def close(self):
+        """Close the redis client"""
+        await self.redis.close()

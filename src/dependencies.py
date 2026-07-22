@@ -13,10 +13,10 @@ else:
 
 from src.config import Settings
 from src.db.interfaces.base import BaseDatabase
+from src.repositories.paper import PaperRepository
 from src.services.agents.agentic_rag import AgenticRAGService
 from src.services.agents.factory import make_agentic_rag_service
 from src.services.arxiv.client import ArxivClient
-# from src.services.cache.client import CacheClient
 from src.services.embeddings.jina_client import EmbeddingsClient
 from src.services.langfuse.client import LangfuseTracer
 from src.services.guardrails.Input_guardrails.client import InputGuardrails
@@ -24,7 +24,7 @@ from src.services.llm_gateway.client import LLMClient
 from src.services.opensearch.client import OpenSearchClient
 from src.services.pdf_parser.parser import PDFParserService
 from src.services.paperIngestion.client import PaperIngestionPipeline
-# from src.services.telegram.bot import TelegramBot
+from src.services.cache.client import CacheClient
 
 
 
@@ -53,6 +53,11 @@ def get_db_session(database: Annotated[BaseDatabase, Depends(get_database)]) -> 
     """Get database session dependency."""
     with database.get_session() as session:
         yield session
+
+def get_paper_repo(
+    session: Annotated[Session, Depends(get_db_session)]
+    ) -> PaperRepository:
+    return PaperRepository(session)
 
 
 def get_opensearch_client(request: Request) -> OpenSearchClient:
@@ -89,20 +94,15 @@ def get_langfuse_tracer(request: Request) -> LangfuseTracer:
     """Get Langfuse tracer from the request state."""
     return request.app.state.langfuse_client
 
+def get_cache_client(request: Request) -> CacheClient | None:
+    return getattr(request.app.state, "cache_client", None)
 
-# def get_cache_client(request: Request) -> CacheClient | None:
-#     """Get cache client from the request state."""
-#     return getattr(request.app.state, "cache_client", None)
-
-
-# def get_telegram_service(request: Request) -> Optional[TelegramBot]:
-#     """Get Telegram service from the request state."""
-#     return getattr(request.app.state, "telegram_service", None)
 
 
 # Dependency annotations
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 DatabaseDep = Annotated[BaseDatabase, Depends(get_database)]
+PaperRepoDep = Annotated[PaperRepository, Depends(get_paper_repo)]
 SessionDep = Annotated[Session, Depends(get_db_session)]
 OpenSearchDep = Annotated[OpenSearchClient, Depends(get_opensearch_client)]
 ArxivDep = Annotated[ArxivClient, Depends(get_arxiv_client)]
@@ -113,9 +113,8 @@ GuardrailsDep = Annotated[InputGuardrails, Depends(get_guardrails_service)]
 LangfuseDep = Annotated[LangfuseTracer, Depends(get_langfuse_tracer)]
 RedisDep = Annotated[LangfuseTracer, Depends(ArqRedis)]
 IngestionDep = Annotated[PaperIngestionPipeline, Depends(get_paper_ingestion_pipeline)]
+CacheDep = Annotated[CacheClient | None, Depends(get_cache_client)]
 
-# CacheDep = Annotated[CacheClient | None, Depends(get_cache_client)]
-# TelegramDep = Annotated[Optional[TelegramBot], Depends(get_telegram_service)]
 
 
 def get_agentic_rag_service(

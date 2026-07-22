@@ -1,7 +1,7 @@
 from fastapi import FastAPI,Request
-from src.route.Agenticask import router
-from src.route.searchpaper import arxivrouter 
-from src.route.paperIngestion import ingestionrouter 
+from src.router.Agenticask import router
+from src.router.searchpaper import arxivrouter 
+from src.router.paperIngestion import ingestionrouter 
 from fastapi.responses import JSONResponse
 import logfire
 from src.config import get_settings
@@ -16,6 +16,7 @@ from src.services.logfire.factory import configure_logfire
 from src.services.opensearch.factory import make_opensearch_client
 from src.services.agents.factory import make_agentic_rag_service
 from src.services.paperIngestion.factory import get_paperIngestion
+from src.services.cache.factory import make_cache_client
 
 from src.db.factory import make_database
 from arq import create_pool
@@ -44,9 +45,17 @@ async def lifespan(app: FastAPI):
     app.state.pdf_parser_client = make_pdf_parser_service()
     app.state.langfuse_client   = make_langfuse_tracer()
     app.state.llm_client        = make_llm_client()
+    app.state.cache_client      = make_cache_client(settings)
     
     # ARQ redis pool — used to enqueue ingestion jobs onto the worker queue
-    app.state.redis = await create_pool(RedisSettings())
+    app.state.redis = await create_pool(RedisSettings(
+        host= settings.redis.host,
+        port=settings.redis.port,
+        username=settings.redis.username,
+        password=settings.redis.password,
+        ssl=settings.redis.ssl
+    ))
+    
     logger.info("ARQ redis pool connected")
 
     app.state.paper_ingestion_pipeline = get_paperIngestion(
@@ -95,7 +104,8 @@ async def lifespan(app: FastAPI):
     app.state.agentic_rag_service = agentic_rag_service
 
     yield
-    await app.state.redis.close()
+    await app.state.cache_client.close() # your CacheClient.close() -> self.redis.close()
+    await app.state.redis.close() # ARQ pool
     database.teardown()
     logger.info("API shutdown complete")
 
@@ -121,7 +131,7 @@ def _is_ok(v):
         return v.get("status") == "ok"
     return v == "ok"
 
-@app.get("/health")
+@app.get("/api/v1/health")
 async def health(request: Request):
     checks = {}
 
@@ -150,6 +160,13 @@ async def health(request: Request):
     except Exception as e:
         checks["redis"] = f"error: {e}"
 
+    # Redis (Cache)
+    try:
+        await request.app.state.cache_client.redis.ping()
+        checks["redis_cache"] = "ok"
+    except Exception as e:
+        checks["redis_cache"] = f"error: {e}"
+        
     # Database
     try:
         request.app.state.database.health_check()  # adjust to your DB client's actual method
